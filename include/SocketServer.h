@@ -18,16 +18,15 @@
 #define  STDOUT_FD 1
 
 class SocketServer{
-    private:
-        int server_fd;
-        uint16_t _port;
-        struct sockaddr_in address;
-
     public:
         SocketServer(uint16_t PORT);
         ~SocketServer();
         void CreateSocket(void);
         void Listen(std::function<void(std::string , std::promise<std::string> )> callback);
         void Write(const char* Message);
+    private:
+        int server_fd;
+        uint16_t _port;
+        struct sockaddr_in address;
 };
 #endif
