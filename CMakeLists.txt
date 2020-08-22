@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.7)
+project(capstoneHttp)
 
 add_definitions(-std=c++17)
 
@@ -8,8 +9,6 @@ set(CMAKE_CXX_FLAGS, "${CXX_FLAGS}")
 add_subdirectory(lib/jjson)
 
 include_directories(include)
-file(GLOB SOURCES "")
+file(GLOB SOURCES "src/*.cpp")
 
-project(capstoneHttp  ${SOURCES})
-
-add_executable(capstoneHttp main.cpp)
+add_executable(capstoneHttp main.cpp ${SOURCES})
