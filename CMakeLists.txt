@@ -5,10 +5,11 @@ add_definitions(-std=c++17)
 set(CXX_FLAGS "-Wall")
 set(CMAKE_CXX_FLAGS, "${CXX_FLAGS}")
 
+add_subdirectory(lib/jjson)
 
 include_directories(include)
-file(GLOB SOURCES "src/*.cpp")
+file(GLOB SOURCES "")
 
-project(HttpServer  ${SOURCES})
+project(capstoneHttp  ${SOURCES})
 
-add_executable(HttpServer src/main.cpp)
+add_executable(capstoneHttp main.cpp)

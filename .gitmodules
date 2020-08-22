@@ -1,0 +1,3 @@
+[submodule "lib/jjson"]
+	path = lib/jjson
+	url = git@github.com:jm4l1/jjson.git
