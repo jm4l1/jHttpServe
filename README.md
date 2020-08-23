@@ -1,6 +1,7 @@
 # CPPND: Capstone HTTP Server
 
-This is the Capstone project for in the [Udacity C++ Nanodegree Program](https://www.udacity.com/course/c-plus-plus-nanodegree--nd213)
+This is the Capstone project for in the [Udacity C++ Nanodegree Program](https://www.udacity.com/course/c-plus-plus-nanodegree--nd213). This is a basic implementation of an Hypertext Transer Protocol (HTTP) based on the following RFC.
+* [RFC 7230](https://tools.ietf.org/html/rfc7230)
 
 ## Dependencies for Running Locally
 * cmake >= 3.7
@@ -19,4 +20,4 @@ This is the Capstone project for in the [Udacity C++ Nanodegree Program](https:/
 1. Clone this repo.
 2. Make a build directory in the top level directory: `mkdir build && cd build`
 3. Compile: `cmake .. && make`
-4. Run it: `./HelloWorld`.
+4. Run it: `./capstoneHttp`.
