@@ -1,7 +1,6 @@
 #include "HttpMessage.h"
 #include <sstream>
 #include <iostream>
-#include <string>
 
 std::string HttpMessage::ToString() const{
     std::stringstream http_stream;
@@ -42,6 +41,10 @@ HttpRequest::HttpRequest(std::string request_string){
     std::getline(request_stream, stream_line);
     std::stringstream status_line_stream(stream_line);
     status_line_stream >> _method >> _request_target >> _http_version;
+    if(std::find(Methods.begin(),Methods.end(),_method) == Methods.end()){
+        isValid = false;
+        return;
+    }
 
     //headers
     while(std::getline(request_stream, stream_line)){
@@ -57,6 +60,7 @@ HttpRequest::HttpRequest(std::string request_string){
        body_string.append(stream_line).append("\n");
     }
     SetBody(body_string);
+    isValid = true;
 };
 void HttpRequest::SetMethod(std::string method){
     _method = method;
@@ -97,6 +101,7 @@ HttpResponse::HttpResponse(std::string response_string){
 };
 void HttpResponse::SetStatusCode(int status_code){
     _status_code = status_code;
+    _reason_phrase = ResponseCodes[status_code];
 };
 void HttpResponse::SetReasonPhrase(std::string reason_phrase){
     _reason_phrase = reason_phrase;
@@ -107,4 +112,6 @@ std::string HttpResponse::GetStartLine() const{
     return start_line_stream.str();
 
 };
-
+void HttpResponse::Send(){
+    response_promise.set_value(this->ToString());
+}
