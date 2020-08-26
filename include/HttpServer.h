@@ -65,7 +65,7 @@ class HttpServer{
                  auto now = std::chrono::system_clock::now();
                  auto date = std::chrono::system_clock::to_time_t(now);
                  std::stringstream date_stream;
-                 date_stream << std::put_time(std::localtime(&date), "%F %T") ;
+                 date_stream << std::put_time(std::gmtime(&date), "%a, %d %b %Y %OH:%M:%S GMT") ;
                  return date_stream.str();
         };
 };

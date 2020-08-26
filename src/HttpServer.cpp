@@ -34,10 +34,11 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
     if(!fs::exists(fs::path(target_location)))
     {
         response.SetStatusCode(404);
-        response.SetHeader("context-type","text/html");
-        response.SetHeader("Date" , GetDate());
+        response.SetHeader("content-type","text/html");
+        response.SetHeader("date" , GetDate());
         body_stream << "<body><div><H1>404 Not Found</H1>"  << target_location << " not found.</div></body>";
         response.SetBody(body_stream.str());
+        response.SetHeader("content-length", std::to_string(body_stream.str().size() * sizeof(char)) );
         response.Send();
         return;
     }
@@ -45,23 +46,26 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
     if(!target_file.is_open())
     {
         response.SetStatusCode(500);
-        response.SetHeader("context-type","text/html");
+        response.SetHeader("content-type","text/html");
         response.SetHeader("Date" , GetDate());
         body_stream << "<body><H1>500 Internal Server Error</H1><div>.</div></body>";
         response.SetBody(body_stream.str());
+        response.SetHeader("content-length", std::to_string(body_stream.str().size() * sizeof(char)) );
         response.Send();
         return;
     }
 
     std::string target_string;
     std::string line;
-    while (std::getline(target_file, line)) {
+    while (std::getline(target_file, line))
+    {
         target_string.append(line);
     }
     response.SetStatusCode(200);
-    response.SetHeader("context-type","text/html");
+    response.SetHeader("content-type","text/html");
     response.SetHeader("Date" , GetDate());
     response.SetBody(target_string);
+    response.SetHeader("content-length", std::to_string(target_string.size() * sizeof(target_string[0])) );
     response.Send();
     return;
 };
@@ -77,11 +81,16 @@ void HttpServer::HandleApplicationLayer(){
         
         std::stringstream body_stream;
         body_stream << "<H1>Hello there</H1>" << request.ToString();
+        auto body_string = body_stream.str();
+        auto body_length = body_string.size();
+        auto content_length_bytes = body_length *  sizeof(body_string[0]);
+
         response.SetStatusCode(200);
-        response.SetHeader("context-type","text/html");
-        response.SetHeader("Date" , GetDate());
+        response.SetHeader("content-type","text/html");
+        response.SetHeader("date" , GetDate());
+        response.SetHeader("content-length", std::to_string(content_length_bytes) );
         
-        response.SetBody(body_stream.str());
+        response.SetBody(body_string);
 
         response.Send();
         return;
