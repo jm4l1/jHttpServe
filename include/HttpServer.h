@@ -14,24 +14,25 @@
 class MessageQueue{
     public:
         MessageQueue(){};
-        HttpRequest receive(){
+        std::pair<HttpRequest,HttpResponse> receive()
+        {
             std::unique_lock<std::mutex> uLock(_mutex);
             _message_receive_con.wait(uLock,[this]{ return !_requests.empty();});
-
             auto request = std::move(_requests.front());
             _requests.pop_front();
 
             return request;
         };
-        void Send(HttpRequest &&request){
+        void Send(std::pair<HttpRequest,HttpResponse> &&req_res)
+        {
             std::lock_guard<std::mutex> Lock(_mutex);
-            _requests.push_back(std::move(request));
+            _requests.push_back(std::move(req_res));
             _message_receive_con.notify_one();
         };
     private:
         std::mutex _mutex;
         std::condition_variable _message_receive_con;
-        std::deque<HttpRequest> _requests;
+        std::deque<std::pair<HttpRequest,HttpResponse>> _requests;
 };
 class HttpServer{
     public:
@@ -40,21 +41,26 @@ class HttpServer{
         void Init(std::string);
     private:
         jjson::value _config;
-        MessageQueue _message_queue;
+        MessageQueue _request_queue;
         SocketServer _socket_server;
-        std::function<void(std::string , std::promise<std::string> )> handle_parse_layer = [this](std::string message_buffer, std::promise<std::string> &&response_promise){
+        void ParseConfigFile(std::string);
+        void HandleApplicationLayer();
+        void HandleApplicationLayerSync(HttpRequest&& , HttpResponse&&);
+        std::function<void(std::string , std::promise<std::string>)> handle_parse_layer = [this](std::string message_buffer, std::promise<std::string> &&response_promise){
              HttpRequest request = HttpRequest(message_buffer);
+             HttpResponse response = HttpResponse(std::move(response_promise));
              if(!request.isValid){
-                HttpResponse response = HttpResponse(std::move(response_promise));
                 response.SetHeader("server",(std::string)_config["server_name"]);
                 response.SetStatusCode(400);
                 response.SetHeader("date" , GetDate());
                 response.Send();
                 return;
              }
-            _message_queue.Send(std::move(request));
+            //  auto req_res = std::make_pair(std::move(request),std::move(response));
+            // _request_queue.Send(std::move(req_res));
+            // return;
+            HandleApplicationLayerSync(std::move(request),std::move(response));
         };
-        void ParseConfigFile(std::string);
         static std::string GetDate(){
                  auto now = std::chrono::system_clock::now();
                  auto date = std::chrono::system_clock::to_time_t(now);

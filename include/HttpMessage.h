@@ -15,8 +15,16 @@ static std::vector<std::string> Methods({"GET" ,"HEAD" ,"POST" ,"PUT" ,"DELETE" 
 
 static std::unordered_map<int,std::string> ResponseCodes = {
     {200 ,"OK"},
-    {400 , "Bad Request"}
-    
+    {400 , "Bad Request"},
+    {401 , "Unauthorized"},
+    {403 , "Forbidden"},
+    {404 , "Not Found"},
+    {500 , "Internal Server Error"},
+    {501 , "Not Implemented"},
+    {502 , "Bad Gateway"},
+    {503 , "Service Unavailable"},
+    {504 , "Gateway Timeout"},
+    {505 , "HTTP Version Not Supported"}
 };
 class HttpMessage{
     public:
@@ -38,10 +46,29 @@ class HttpRequest : public HttpMessage{
     public:
         HttpRequest():HttpMessage(){};
         HttpRequest(std::string);
+        HttpRequest(const HttpRequest&B){
+            this->_method = B._method;
+            this->_request_target = B._request_target;
+            this->isValid = B.isValid;
+        };
+        HttpRequest(HttpRequest&& B){
+            this->_method = B._method;
+            this->_request_target = B._request_target;
+            this->isValid = B.isValid;
+        };
+        HttpRequest& operator=(const HttpRequest& B)=delete;
+        HttpRequest& operator=(HttpRequest&& B){
+            this->_method = B._method;
+            this->_request_target = B._request_target;
+            this->isValid = B.isValid;
+            return *this;
+        };
         ~HttpRequest(){};
         void SetMethod(std::string);
         void SetTarget(std::string);
         std::string GetStartLine() const override;
+        std::string GetMethod(){ return _method;};
+        std::string GetTarget(){ return _request_target;};
         bool isValid;
     private:
         std::string _method;
@@ -50,7 +77,20 @@ class HttpRequest : public HttpMessage{
 class HttpResponse : public HttpMessage{
     public:
         HttpResponse():HttpMessage(){};
-        HttpResponse(std::promise<std::string> &&promise):response_promise(std::move(promise)){}
+        HttpResponse(HttpResponse&& B){
+            this->_status_code = B._status_code;
+            this->_reason_phrase = B._reason_phrase;
+            this->_http_version = B._http_version;
+            this->response_promise = std::move(response_promise);
+        };
+        HttpResponse& operator=(HttpResponse&& B){
+            this->_status_code = B._status_code;
+            this->_reason_phrase = B._reason_phrase;
+            this->_http_version = B._http_version;
+            this->response_promise = std::move(response_promise);
+            return *this;
+        };
+        HttpResponse(std::promise<std::string> &&promise):response_promise(std::move(promise)),_http_version("HTTP/1.1"){};
         HttpResponse(std::string);
         ~HttpResponse(){};
         void SetStatusCode(int);
