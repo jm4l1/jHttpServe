@@ -1,7 +1,7 @@
 #include "RouteMap.h"
 #include <sstream>
 
-void RouteMap::RegisterRoute(std::string route_key,std::function<void()> route_handler){
+void RouteMap::RegisterRoute(std::string route_key,std::function<void(HttpRequest&& , HttpResponse&&)> route_handler){
     routes.emplace(std::make_pair(route_key, route_handler));
 }
 bool RouteMap::HasRoute(std::string route){
@@ -11,7 +11,7 @@ bool RouteMap::HasRoute(std::string route){
 void RouteMap::UnregisterRoute(std::string route_key){
     routes.erase(route_key);
 }
-std::optional<std::function<void()>> RouteMap::GetRouteHandler(std::string route){
+std::optional<std::function<void(HttpRequest&& , HttpResponse&&)>> RouteMap::GetRouteHandler(std::string route){
     auto route_handler = routes.find(route);
     if(route_handler == routes.end())
     {

@@ -7,6 +7,8 @@
 #include <vector>
 #include <future>
 
+#include "jjson.hpp"
+
 #define SP char(32)
 #define CR char(13)
 #define LF char(10)
@@ -32,7 +34,8 @@ class HttpMessage{
         virtual ~HttpMessage(){};
         std::string ToString() const;
         void SetHeader(std::string,std::string);
-        void SetBody(std::string);
+        void SetBody(const std::string&);
+        void SetBody(const jjson::value&);
         std::optional<std::string> GetHeader(std::string) const;
         std::string GetBody() const;
         void SetVersion(std::string);

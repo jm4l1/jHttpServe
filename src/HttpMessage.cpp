@@ -15,8 +15,17 @@ std::string HttpMessage::ToString() const{
 void HttpMessage::SetHeader(std::string header_name ,std::string header_value){
     _headers[header_name] = header_value;
 };
-void HttpMessage::SetBody(std::string body){
+void HttpMessage::SetBody(const std::string& body){
     _body = body;
+    auto body_length_char = _body.size();
+    auto body_length_bytes = body_length_char * sizeof(_body[0]);
+    SetHeader("content-length",std::to_string(body_length_bytes));
+};
+void HttpMessage::SetBody(const jjson::value& json_body){
+    _body = json_body.to_string();
+    auto body_length_char = _body.size();
+    auto body_length_bytes = body_length_char * sizeof(_body[0]);
+    SetHeader("content-length",std::to_string(body_length_bytes));
 };
 std::optional<std::string >HttpMessage::GetHeader(std::string header_name) const{
     auto kv_pair = _headers.find(header_name);

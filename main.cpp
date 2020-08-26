@@ -72,5 +72,14 @@ int main(int argc , char* argv[]){
         timeout =std::stoi(argument_map["t"]);
     }
     auto server = HttpServer();
+    auto get_api = [](HttpRequest&& request, HttpResponse&& response){
+        auto api_object = jjson::Object();
+        api_object["running"] = true;
+        response.SetStatusCode(200);
+        response.SetHeader("content-type","application/json");
+        response.SetBody(api_object);
+        response.Send();
+    };
+    server.Get("/api",get_api);
     server.Init(file_name);
 }
