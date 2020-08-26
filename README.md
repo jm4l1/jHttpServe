@@ -14,10 +14,11 @@ This is the Capstone project for in the [Udacity C++ Nanodegree Program](https:/
   * Linux: gcc / g++ is installed by default on most Linux distros
   * Mac: same deal as make - [install Xcode command line tools](https://developer.apple.com/xcode/features/)
   * Windows: recommend using [MinGW](http://www.mingw.org/)
-
+* [jm4l1/jjson](https://github.com/jm4l1/jjson)
 ## Basic Build Instructions
 
 1. Clone this repo.
-2. Make a build directory in the top level directory: `mkdir build && cd build`
-3. Compile: `cmake .. && make`
-4. Run it: `./capstoneHttp`.
+2. Add git submodules `git submodule add git@github.com:jm4l1/jjson.git lib/jjson`
+3. Make a build directory in the top level directory: `mkdir build && cd build`
+4. Compile: `cmake .. && make`
+5. Run it: `./capstoneHttp`.
