@@ -6,6 +6,15 @@
 
 namespace fs = std::filesystem;
 
+void HttpServer::Get(std::string target, std::function<void(HttpRequest&& , HttpResponse&&)> get_handler)
+{
+    _route_map.RegisterRoute("GET"+target , get_handler);
+}
+void HttpServer::Post(std::string target , std::function<void(HttpRequest&& , HttpResponse&&)> post_handler)
+{
+    _route_map.RegisterRoute("POST"+target , post_handler);
+}
+
 void HttpServer::Init(std::string config_file_name){
     ParseConfigFile(config_file_name);
     int port = (int)_config["port"];
@@ -29,14 +38,23 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
     //check method allowed
 
     //check for request 
+    auto method = request.GetMethod();
     auto target = request.GetTarget();
+
+    //check route map
+
+    auto request_handler = _route_map.GetRouteHandler(method+target).value_or(nullptr);
+    if(request_handler){
+        request_handler(std::move(request) , std::move(response));
+        return;
+    }
+    //fall back to web dir
     auto target_location = (std::string)_config["web_dir"] + "/" + target;
     if(!fs::exists(fs::path(target_location)))
     {
         response.SetStatusCode(404);
-        response.SetHeader("context-type","text/html");
-        response.SetHeader("Date" , GetDate());
-        body_stream << "<body><div><H1>404 Not Found</H1>"  << target_location << " not found.</div></body>";
+        response.SetHeader("content-type","text/html");
+        body_stream << "<body><div><H1>404 Not Found</H1>"  << target_location << " not found. "<< _route_map.GetRoutes() << "</div></body>";
         response.SetBody(body_stream.str());
         response.Send();
         return;
@@ -45,8 +63,7 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
     if(!target_file.is_open())
     {
         response.SetStatusCode(500);
-        response.SetHeader("context-type","text/html");
-        response.SetHeader("Date" , GetDate());
+        response.SetHeader("content-type","text/html");
         body_stream << "<body><H1>500 Internal Server Error</H1><div>.</div></body>";
         response.SetBody(body_stream.str());
         response.Send();
@@ -55,12 +72,12 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
 
     std::string target_string;
     std::string line;
-    while (std::getline(target_file, line)) {
+    while (std::getline(target_file, line))
+    {
         target_string.append(line);
     }
     response.SetStatusCode(200);
-    response.SetHeader("context-type","text/html");
-    response.SetHeader("Date" , GetDate());
+    response.SetHeader("content-type","text/html");
     response.SetBody(target_string);
     response.Send();
     return;
@@ -77,12 +94,11 @@ void HttpServer::HandleApplicationLayer(){
         
         std::stringstream body_stream;
         body_stream << "<H1>Hello there</H1>" << request.ToString();
-        response.SetStatusCode(200);
-        response.SetHeader("context-type","text/html");
-        response.SetHeader("Date" , GetDate());
-        
-        response.SetBody(body_stream.str());
+        auto body_string = body_stream.str();
 
+        response.SetStatusCode(200);
+        response.SetHeader("content-type","text/html");
+        response.SetBody(body_string);
         response.Send();
         return;
     }

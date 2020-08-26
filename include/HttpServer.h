@@ -10,6 +10,7 @@
 #include "HttpMessage.h"
 #include "jjson.hpp"
 #include "SocketServer.h"
+#include "RouteMap.h"
 
 class MessageQueue{
     public:
@@ -39,20 +40,24 @@ class HttpServer{
         HttpServer(){};
         ~HttpServer(){};
         void Init(std::string);
+        void Get(std::string , std::function<void(HttpRequest&& , HttpResponse&&)>);
+        void Post(std::string , std::function<void(HttpRequest&& , HttpResponse&&)>);
     private:
         jjson::value _config;
         MessageQueue _request_queue;
         SocketServer _socket_server;
+        RouteMap _route_map;
         void ParseConfigFile(std::string);
         void HandleApplicationLayer();
         void HandleApplicationLayerSync(HttpRequest&& , HttpResponse&&);
         std::function<void(std::string , std::promise<std::string>)> handle_parse_layer = [this](std::string message_buffer, std::promise<std::string> &&response_promise){
              HttpRequest request = HttpRequest(message_buffer);
              HttpResponse response = HttpResponse(std::move(response_promise));
-             if(!request.isValid){
                 response.SetHeader("server",(std::string)_config["server_name"]);
-                response.SetStatusCode(400);
                 response.SetHeader("date" , GetDate());
+                response.SetHeader("Connection","close");
+             if(!request.isValid){
+                response.SetStatusCode(400);
                 response.Send();
                 return;
              }
@@ -65,7 +70,7 @@ class HttpServer{
                  auto now = std::chrono::system_clock::now();
                  auto date = std::chrono::system_clock::to_time_t(now);
                  std::stringstream date_stream;
-                 date_stream << std::put_time(std::localtime(&date), "%F %T") ;
+                 date_stream << std::put_time(std::gmtime(&date), "%a, %d %b %Y %OH:%M:%S GMT") ;
                  return date_stream.str();
         };
 };
