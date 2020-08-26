@@ -14,8 +14,8 @@ void HttpServer::Post(std::string target , std::function<void(HttpRequest&& , Ht
 {
     _route_map.RegisterRoute("POST"+target , post_handler);
 }
-
-void HttpServer::Init(std::string config_file_name){
+void HttpServer::Init(std::string config_file_name)
+{
     ParseConfigFile(config_file_name);
     int port = (int)_config["port"];
     _socket_server.SetPort(port);
@@ -29,33 +29,51 @@ void HttpServer::Init(std::string config_file_name){
     // socket_thread.join();
 
 };
-
+void HttpServer::Log(const HttpRequest &request, const HttpResponse &response)
+{
+    std::lock_guard<std::mutex> lock(_logger_mutex);
+    auto status_code = response.GetStatusCode();
+    auto formatted_status_start = status_code < 200  ? "\033[1;34m"  : status_code < 300 ? "\033[1;32m"  : status_code < 400 ? "\033[1;33m" : "\033[1;31m";
+    auto formatted_status_end = "\033[0m";
+    std::cout << response.GetHeader("date").value_or("") << " " << request.GetStartLine() <<  " " << formatted_status_start << status_code << formatted_status_end << " -\n"; 
+};
 void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&& response)
 {
-    std::cout << "request recieved\n";
     std::stringstream body_stream;
 
-    //check method allowed
-
-    //check for request 
     auto method = request.GetMethod();
     auto target = request.GetTarget();
-
-    //check route map
-
+    //check method allowed
+    auto method_itr = std::find(_allowed_methods.begin(),_allowed_methods.end(),method);
+    if(method_itr ==_allowed_methods.end())
+    {
+        response.SetStatusCode(405);
+        std::stringstream allowed_stream;
+        std::ostream_iterator<std::string> outputString(allowed_stream , ",");
+        std::copy(_allowed_methods.begin(),_allowed_methods.end(),outputString);
+        response.SetHeader("allow",allowed_stream.str());
+        body_stream << "<body><div><H1>405 Method Not Allowed</H1>" << allowed_stream.str() << "</div></body>";
+        response.SetBody(body_stream.str());
+        Log(request,response);
+        response.Send();
+        return;
+    }
+    //check route map for requested resource
     auto request_handler = _route_map.GetRouteHandler(method+target).value_or(nullptr);
     if(request_handler){
         request_handler(std::move(request) , std::move(response));
         return;
     }
+    target = target == "/" ?  "/index.html" : target;
     //fall back to web dir
     auto target_location = (std::string)_config["web_dir"] + "/" + target;
     if(!fs::exists(fs::path(target_location)))
     {
         response.SetStatusCode(404);
         response.SetHeader("content-type","text/html");
-        body_stream << "<body><div><H1>404 Not Found</H1>"  << target_location << " not found. "<< _route_map.GetRoutes() << "</div></body>";
+        body_stream << "<body><div><H1>404 Not Found</H1>"  << target << " not found. "<< _route_map.GetRoutes() << "</div></body>";
         response.SetBody(body_stream.str());
+        Log(request,response);
         response.Send();
         return;
     }
@@ -66,6 +84,7 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
         response.SetHeader("content-type","text/html");
         body_stream << "<body><H1>500 Internal Server Error</H1><div>.</div></body>";
         response.SetBody(body_stream.str());
+        Log(request,response);
         response.Send();
         return;
     }
@@ -79,6 +98,7 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
     response.SetStatusCode(200);
     response.SetHeader("content-type","text/html");
     response.SetBody(target_string);
+    Log(request,response);
     response.Send();
     return;
 };
@@ -99,6 +119,7 @@ void HttpServer::HandleApplicationLayer(){
         response.SetStatusCode(200);
         response.SetHeader("content-type","text/html");
         response.SetBody(body_string);
+        Log(request,response);
         response.Send();
         return;
     }
@@ -141,6 +162,12 @@ void HttpServer::ParseConfigFile(std::string file_name){
     {
         std::cout << "web dir could not be found!\n";
         exit(EXIT_FAILURE);
+    }
+    if(_config.HasKey("allowed_methods")){
+        _allowed_methods = (std::vector<std::string>)_config["allowed_methods"]; 
+    }
+    else{
+        _allowed_methods = Methods;
     }
     std::cout << "config file loaded\n";
 }

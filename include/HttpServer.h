@@ -47,9 +47,12 @@ class HttpServer{
         MessageQueue _request_queue;
         SocketServer _socket_server;
         RouteMap _route_map;
+        std::mutex _logger_mutex;
+        std::vector<std::string> _allowed_methods;
         void ParseConfigFile(std::string);
         void HandleApplicationLayer();
         void HandleApplicationLayerSync(HttpRequest&& , HttpResponse&&);
+        void Log(const HttpRequest& , const HttpResponse&);
         std::function<void(std::string , std::promise<std::string>)> handle_parse_layer = [this](std::string message_buffer, std::promise<std::string> &&response_promise){
              HttpRequest request = HttpRequest(message_buffer);
              HttpResponse response = HttpResponse(std::move(response_promise));
@@ -58,6 +61,7 @@ class HttpServer{
                 response.SetHeader("Connection","close");
              if(!request.isValid){
                 response.SetStatusCode(400);
+                Log(request,response);
                 response.Send();
                 return;
              }
