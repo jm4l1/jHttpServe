@@ -14,8 +14,8 @@ void HttpServer::Post(std::string target , std::function<void(HttpRequest&& , Ht
 {
     _route_map.RegisterRoute("POST"+target , post_handler);
 }
-
-void HttpServer::Init(std::string config_file_name){
+void HttpServer::Init(std::string config_file_name)
+{
     ParseConfigFile(config_file_name);
     int port = (int)_config["port"];
     _socket_server.SetPort(port);
@@ -29,21 +29,35 @@ void HttpServer::Init(std::string config_file_name){
     // socket_thread.join();
 
 };
-
-void HttpServer::Log(const HttpRequest &request, const HttpResponse &response){
-    // std::lock_guard<std::mutex> lock(_logger_mutex);
-    std::cout << response.GetHeader("date").value_or("") << " " << request.GetStartLine() <<  " " << response.GetStatusCode() << " -\n"; 
+void HttpServer::Log(const HttpRequest &request, const HttpResponse &response)
+{
+    std::lock_guard<std::mutex> lock(_logger_mutex);
+    auto status_code = response.GetStatusCode();
+    auto formatted_status_start = status_code < 200  ? "\033[1;34m"  : status_code < 300 ? "\033[1;32m"  : status_code < 400 ? "\033[1;33m" : "\033[1;31m";
+    auto formatted_status_end = "\033[0m";
+    std::cout << response.GetHeader("date").value_or("") << " " << request.GetStartLine() <<  " " << formatted_status_start << status_code << formatted_status_end << " -\n"; 
 };
 void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&& response)
 {
     std::stringstream body_stream;
 
-    //check method allowed
-
-    //check for request 
     auto method = request.GetMethod();
     auto target = request.GetTarget();
-
+    //check method allowed
+    auto method_itr = std::find(_allowed_methods.begin(),_allowed_methods.end(),method);
+    if(method_itr ==_allowed_methods.end())
+    {
+        response.SetStatusCode(405);
+        std::stringstream allowed_stream;
+        std::ostream_iterator<std::string> outputString(allowed_stream , ",");
+        std::copy(_allowed_methods.begin(),_allowed_methods.end(),outputString);
+        response.SetHeader("allow",allowed_stream.str());
+        body_stream << "<body><div><H1>405 Method Not Allowed</H1>" << allowed_stream.str() << "</div></body>";
+        response.SetBody(body_stream.str());
+        Log(request,response);
+        response.Send();
+        return;
+    }
     //check route map for requested resource
     auto request_handler = _route_map.GetRouteHandler(method+target).value_or(nullptr);
     if(request_handler){
@@ -148,6 +162,12 @@ void HttpServer::ParseConfigFile(std::string file_name){
     {
         std::cout << "web dir could not be found!\n";
         exit(EXIT_FAILURE);
+    }
+    if(_config.HasKey("allowed_methods")){
+        _allowed_methods = (std::vector<std::string>)_config["allowed_methods"]; 
+    }
+    else{
+        _allowed_methods = Methods;
     }
     std::cout << "config file loaded\n";
 }

@@ -1,7 +1,7 @@
 {
     "port" : 12345,
     "timeout" : 100,
-    "server_name" :"CPPND Server",
+    "server_name" :"Http Server / 1.0",
     "allowed_methods" : ["GET","OPTIONS","POST","DELETE"],
     "web_dir" : "/Users/mali/Developer/mali/cppfiles/CppND-Capstone-http-server/www"
 }

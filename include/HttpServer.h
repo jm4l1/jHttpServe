@@ -48,6 +48,7 @@ class HttpServer{
         SocketServer _socket_server;
         RouteMap _route_map;
         std::mutex _logger_mutex;
+        std::vector<std::string> _allowed_methods;
         void ParseConfigFile(std::string);
         void HandleApplicationLayer();
         void HandleApplicationLayerSync(HttpRequest&& , HttpResponse&&);
