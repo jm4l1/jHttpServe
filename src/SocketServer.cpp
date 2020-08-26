@@ -29,7 +29,7 @@ void SocketServer::CreateSocket(){
     }
     std::cout << "[CreateSocket] - Socket bound to port " << _port << "\n";
 }
-void SocketServer::Listen(std::function<void(std::string , std::promise<std::string> )> connection_callback){
+void SocketServer::Listen(std::function<void(std::string , std::promise<std::string>&& )> connection_callback){
     int valread;
     int connect_socket;
     int addrlen = sizeof(address);

@@ -19,10 +19,12 @@
 
 class SocketServer{
     public:
+        SocketServer() = default;
         SocketServer(uint16_t PORT);
         ~SocketServer();
+        void SetPort(uint16_t PORT){ _port = PORT ;};
         void CreateSocket(void);
-        void Listen(std::function<void(std::string , std::promise<std::string> )> callback);
+        void Listen(std::function<void(std::string , std::promise<std::string>&&)> callback);
         void Write(const char* Message);
     private:
         int server_fd;
