@@ -30,16 +30,11 @@ void SocketServer::CreateSocket(){
     std::cout << "[CreateSocket] - Socket bound to port " << _port << "\n";
 }
 void SocketServer::Listen(std::function<void(std::string , std::promise<std::string>&& )> connection_callback){
-    int valread;
     int connect_socket;
     int addrlen = sizeof(address);
-    char buffer[1024] = {0};
     struct sockaddr address;
-    struct sockaddr_in* addressInternet;
-    socklen_t len = sizeof(address);
-    uint16_t port;
     
-    std::cout << "Listening on * " << _port << "\n";
+    std::cout << "[SocketServer] - Listening on * " << _port << "\n";
 
     if (listen(server_fd, 3) < 0)
     {
@@ -56,12 +51,17 @@ void SocketServer::Listen(std::function<void(std::string , std::promise<std::str
         //handle on child thread
 
         auto thread_handler = [&](int &&connect_socket){
+            socklen_t len = sizeof(address);
+            uint16_t port;
+            struct sockaddr_in* addressInternet;
+            int valread;
+            char buffer[1024] = {0};
             std::promise<std::string> response_prms;
             std::future<std::string> ftr = response_prms.get_future();
              if(getpeername(connect_socket, &address,&len) == 0){
                 addressInternet = (struct sockaddr_in*) &address;
                 port = ntohs ( addressInternet->sin_port );    
-                std::cout << "Connection received from " << inet_ntoa( addressInternet->sin_addr) << " on port " << port << "\n";
+                // std::cout << "Connection received from on child thread " << inet_ntoa( addressInternet->sin_addr) << " on port " << port << "\n";
             }
             valread = read( connect_socket , buffer, 1024);
             connection_callback(std::string(buffer),std::move(response_prms));
@@ -72,13 +72,13 @@ void SocketServer::Listen(std::function<void(std::string , std::promise<std::str
         };
         std::thread t(thread_handler,std::move(connect_socket));
         t.detach();
-        if(getpeername(connect_socket, &address,&len) == 0){
-            addressInternet = (struct sockaddr_in*) &address;
-            port = ntohs ( addressInternet->sin_port );    
-            // std::cout<< "Process created with pid " << pid << "\n";
-            std::cout << "Connection received from " << inet_ntoa( addressInternet->sin_addr) << " on port " << port << "\n";
-        }
-        connect_socket = 0;
+        // if(getpeername(connect_socket, &address,&len) == 0){
+        //     addressInternet = (struct sockaddr_in*) &address;
+        //     port = ntohs ( addressInternet->sin_port );    
+        //     // std::cout<< "Process created with pid " << pid << "\n";
+        //     std::cout << "Connection received from on main thread " << inet_ntoa( addressInternet->sin_addr) << " on port " << port << "\n";
+        // }
+        // close(connect_socket);
     //     //with forking
     //     pid = fork();
     //     if(pid == 0){

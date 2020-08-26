@@ -70,8 +70,8 @@ class HttpRequest : public HttpMessage{
         void SetMethod(std::string);
         void SetTarget(std::string);
         std::string GetStartLine() const override;
-        std::string GetMethod(){ return _method;};
-        std::string GetTarget(){ return _request_target;};
+        std::string GetMethod() const{ return _method;};
+        std::string GetTarget() const{ return _request_target;};
         bool isValid;
     private:
         std::string _method;
@@ -98,13 +98,13 @@ class HttpResponse : public HttpMessage{
         ~HttpResponse(){};
         void SetStatusCode(int);
         void SetReasonPhrase(std::string);
-        int GetStatusCode(){ return _status_code;};
+        int GetStatusCode() const{ return _status_code;};
         void Send();
+        std::string GetStartLine() const override;
     private:
         int _status_code;
         std::string _reason_phrase;
         std::string _http_version;
-        std::string GetStartLine() const override;
         std::promise<std::string> response_promise;
 };
 #endif

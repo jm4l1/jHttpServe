@@ -1,7 +1,8 @@
 # CPPND: Capstone HTTP Server
 
-This is the Capstone project for in the [Udacity C++ Nanodegree Program](https://www.udacity.com/course/c-plus-plus-nanodegree--nd213). This is a basic implementation of an Hypertext Transer Protocol (HTTP) based on the following RFC.
-* [RFC 7230](https://tools.ietf.org/html/rfc7230)
+This is the Capstone project for in the [Udacity C++ Nanodegree Program](https://www.udacity.com/course/c-plus-plus-nanodegree--nd213). This is a basic implementation of an Hypertext Transer Protocol (HTTP) based on the following RFCs.
+* [RFC 7230](https://tools.ietf.org/html/rfc7230).
+* [RFC 7231](https://tools.ietf.org/html/rfc7231)
 
 ## Dependencies for Running Locally
 * cmake >= 3.7

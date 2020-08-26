@@ -30,9 +30,12 @@ void HttpServer::Init(std::string config_file_name){
 
 };
 
+void HttpServer::Log(const HttpRequest &request, const HttpResponse &response){
+    // std::lock_guard<std::mutex> lock(_logger_mutex);
+    std::cout << response.GetHeader("date").value_or("") << " " << request.GetStartLine() <<  " " << response.GetStatusCode() << " -\n"; 
+};
 void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&& response)
 {
-    std::cout << "request recieved\n";
     std::stringstream body_stream;
 
     //check method allowed
@@ -41,21 +44,22 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
     auto method = request.GetMethod();
     auto target = request.GetTarget();
 
-    //check route map
-
+    //check route map for requested resource
     auto request_handler = _route_map.GetRouteHandler(method+target).value_or(nullptr);
     if(request_handler){
         request_handler(std::move(request) , std::move(response));
         return;
     }
+    target = target == "/" ?  "/index.html" : target;
     //fall back to web dir
     auto target_location = (std::string)_config["web_dir"] + "/" + target;
     if(!fs::exists(fs::path(target_location)))
     {
         response.SetStatusCode(404);
         response.SetHeader("content-type","text/html");
-        body_stream << "<body><div><H1>404 Not Found</H1>"  << target_location << " not found. "<< _route_map.GetRoutes() << "</div></body>";
+        body_stream << "<body><div><H1>404 Not Found</H1>"  << target << " not found. "<< _route_map.GetRoutes() << "</div></body>";
         response.SetBody(body_stream.str());
+        Log(request,response);
         response.Send();
         return;
     }
@@ -66,6 +70,7 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
         response.SetHeader("content-type","text/html");
         body_stream << "<body><H1>500 Internal Server Error</H1><div>.</div></body>";
         response.SetBody(body_stream.str());
+        Log(request,response);
         response.Send();
         return;
     }
@@ -79,6 +84,7 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
     response.SetStatusCode(200);
     response.SetHeader("content-type","text/html");
     response.SetBody(target_string);
+    Log(request,response);
     response.Send();
     return;
 };
@@ -99,6 +105,7 @@ void HttpServer::HandleApplicationLayer(){
         response.SetStatusCode(200);
         response.SetHeader("content-type","text/html");
         response.SetBody(body_string);
+        Log(request,response);
         response.Send();
         return;
     }
