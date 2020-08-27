@@ -1,5 +1,7 @@
 #include <iostream>
 #include <fstream>
+#include <iterator>
+#include <filesystem>
 
 #include "HttpServer.h"
 
