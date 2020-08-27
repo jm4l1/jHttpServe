@@ -72,8 +72,8 @@ void SocketServer::Listen(std::function<void(std::string , std::promise<std::str
             shutdown(connect_socket,SHUT_WR);
             close(connect_socket);
         };
-        std::thread t(thread_handler,std::move(connect_socket));
-        t.detach();
+        auto t = std::async(std::launch::async,thread_handler,std::move(connect_socket));
+        t.get();
         // if(getpeername(connect_socket, &address,&len) == 0){
         //     addressInternet = (struct sockaddr_in*) &address;
         //     port = ntohs ( addressInternet->sin_port );    
