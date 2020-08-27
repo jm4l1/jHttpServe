@@ -2,6 +2,8 @@
 #include <sstream>
 #include <iostream>
 #include <thread>
+#include <cstring>
+
 SocketServer::SocketServer(uint16_t PORT):_port(PORT){
     CreateSocket();
 }
