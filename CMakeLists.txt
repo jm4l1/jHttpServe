@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.7)
+set(project capstoneHttp)
 project(capstoneHttp)
 
+find_package( Threads REQUIRED)
 add_definitions(-std=c++17)
 
 set(CXX_FLAGS "-Wall")
@@ -12,5 +14,5 @@ add_subdirectory(lib/jjson)
 include_directories(include "lib/jjson/include")
 file(GLOB SOURCES "src/*.cpp" "lib/jjson/src/*.cpp")
 
-target_link_libraries ( jjson )
-add_executable(capstoneHttp main.cpp ${SOURCES})
+add_executable(${project} main.cpp ${SOURCES})
+target_link_libraries( ${project} ${CMAKE_THREAD_LIBS_INIT} )
