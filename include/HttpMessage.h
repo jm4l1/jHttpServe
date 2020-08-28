@@ -21,6 +21,8 @@ static std::unordered_map<int,std::string> ResponseCodes = {
     {401 , "Unauthorized"},
     {403 , "Forbidden"},
     {404 , "Not Found"},
+    {405 , "Method Not Allowed"},
+    {415 , "Unsupported Media Type"},
     {500 , "Internal Server Error"},
     {501 , "Not Implemented"},
     {502 , "Bad Gateway"},
@@ -34,21 +36,23 @@ class HttpMessage{
         virtual ~HttpMessage(){};
         std::string ToString() const;
         void SetHeader(std::string,std::string);
-        void SetBody(const std::string&);
+        // void SetBody(const std::string&);
         void SetBody(const jjson::value&);
+        void SetBody(const std::vector<unsigned char>&);
         std::optional<std::string> GetHeader(std::string) const;
-        std::string GetBody() const;
+        std::vector<unsigned char> GetBody() const;
         void SetVersion(std::string);
         virtual std::string GetStartLine() const{ return "";};
     protected:
         std::unordered_map<std::string,std::string> _headers;
-        std::string _body;
+        std::vector<unsigned char> _body;
         std::string _http_version = "HTTP/1.1";
 };
 class HttpRequest : public HttpMessage{
     public:
         HttpRequest():HttpMessage(){};
         HttpRequest(std::string);
+        HttpRequest(std::vector<unsigned char> &&);
         HttpRequest(const HttpRequest&B){
             this->_method = B._method;
             this->_request_target = B._request_target;
@@ -86,6 +90,8 @@ class HttpResponse : public HttpMessage{
             this->_http_version = B._http_version;
             this->response_promise = std::move(response_promise);
         };
+        HttpResponse(std::promise<std::string> &&promise):response_promise(std::move(promise)),_http_version("HTTP/1.1"){};
+        HttpResponse(std::string);
         HttpResponse& operator=(HttpResponse&& B){
             this->_status_code = B._status_code;
             this->_reason_phrase = B._reason_phrase;
@@ -93,8 +99,6 @@ class HttpResponse : public HttpMessage{
             this->response_promise = std::move(response_promise);
             return *this;
         };
-        HttpResponse(std::promise<std::string> &&promise):response_promise(std::move(promise)),_http_version("HTTP/1.1"){};
-        HttpResponse(std::string);
         ~HttpResponse(){};
         void SetStatusCode(int);
         void SetReasonPhrase(std::string);

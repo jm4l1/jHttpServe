@@ -31,7 +31,7 @@ void SocketServer::CreateSocket(){
     }
     std::cout << "[CreateSocket] - Socket bound to port " << _port << "\n";
 }
-void SocketServer::Listen(std::function<void(std::string , std::promise<std::string>&& )> connection_callback){
+void SocketServer::Listen(std::function<void(std::vector<unsigned char> , std::promise<std::string>&& )> connection_callback){
     int connect_socket;
     int addrlen = sizeof(address);
     struct sockaddr address;
@@ -57,7 +57,7 @@ void SocketServer::Listen(std::function<void(std::string , std::promise<std::str
             uint16_t port;
             struct sockaddr_in* addressInternet;
             int valread;
-            char buffer[1024] = {0};
+            unsigned char buffer[8192] = {0};
             std::promise<std::string> response_prms;
             std::future<std::string> ftr = response_prms.get_future();
              if(getpeername(connect_socket, &address,&len) == 0){
@@ -65,8 +65,8 @@ void SocketServer::Listen(std::function<void(std::string , std::promise<std::str
                 port = ntohs ( addressInternet->sin_port );    
                 // std::cout << "Connection received from on child thread " << inet_ntoa( addressInternet->sin_addr) << " on port " << port << "\n";
             }
-            valread = read( connect_socket , buffer, 1024);
-            connection_callback(std::string(buffer),std::move(response_prms));
+            valread = read( connect_socket , buffer, 8192);
+            connection_callback(std::vector<unsigned char>(buffer ,buffer + valread),std::move(response_prms));
             auto response = ftr.get();
             write(connect_socket,response.c_str(),response.size());
             shutdown(connect_socket,SHUT_WR);

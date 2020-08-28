@@ -3,6 +3,50 @@
     <body>
         <div>
             <H1>Hello there</H1>
+            <form name="uploadForm">
+                <div style="margin-bottom: 10px;">
+                  <input id="uploadInput" type="file" name="myFiles" multiple>
+                </div>
+                <div>
+                    <input id="uploadButton" type="button" value="Send file">
+                </div>
+              </form>
+             
+              <script type="application/javascript">
+                  function sendFiles() {
+                        const file = document.getElementById("uploadInput").files[0];
+                        if(!file){
+                            return;
+                        }
+                        FileUpload(file);
+                    }
+                    function FileUploadAsync(file){
+                        const uri = "/upload";
+                        const xhr = new XMLHttpRequest();
+                        const fd = new FormData();
+
+                        xhr.open("POST", uri, true);
+                        xhr.onreadystatechange = function() {
+                            if (xhr.readyState == 4 && xhr.status == 200) {
+                                alert(xhr.responseText);
+                            }
+                        };
+                        fd.append('myFile', file);
+                        xhr.send(fd);
+                    }
+                    function FileUpload(file) {
+                        const reader = new FileReader();  
+                        const xhr = new XMLHttpRequest();
+                        const uri = "/upload";
+    
+                        xhr.open("POST", uri);
+                        reader.onload = function(evt) {
+                            xhr.send(evt.target.result);
+                        };
+                        reader.readAsArrayBuffer(file);
+                    }
+                document.getElementById("uploadButton").addEventListener("click", sendFiles, false);
+              </script>
         </div>
     </body>
 </html>

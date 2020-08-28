@@ -67,23 +67,32 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
         return;
     }
     target = target == "/" ?  "/index.html" : target;
+    if(target == "/upload")
+    {
+        if(method == "POST")
+        {
+            HandleUpload(std::move(request) , std::move(response));
+            return;
+
+        }
+    }
     //fall back to web dir
     auto target_location = (std::string)_config["web_dir"] + "/" + target;
     if(!fs::exists(fs::path(target_location)))
     {
         response.SetStatusCode(404);
-        response.SetHeader("content-type","text/html");
+        response.SetHeader("content-type","text/html;charset=utf-8");
         body_stream << "<body><div><H1>404 Not Found</H1>"  << target << " not found. "<< _route_map.GetRoutes() << "</div></body>";
         response.SetBody(body_stream.str());
         Log(request,response);
         response.Send();
         return;
     }
-    std::ifstream target_file(target_location);
+    std::ifstream target_file(target_location, std::ios::binary);
     if(!target_file.is_open())
     {
         response.SetStatusCode(500);
-        response.SetHeader("content-type","text/html");
+        response.SetHeader("content-type","text/html;charset=utf-8");
         body_stream << "<body><H1>500 Internal Server Error</H1><div>.</div></body>";
         response.SetBody(body_stream.str());
         Log(request,response);
@@ -91,15 +100,10 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
         return;
     }
 
-    std::string target_string;
-    std::string line;
-    while (std::getline(target_file, line))
-    {
-        target_string.append(line);
-    }
+    std::vector<unsigned char> target_file_contents((std::istreambuf_iterator<char>(target_file)), std::istreambuf_iterator<char>());
     response.SetStatusCode(200);
-    response.SetHeader("content-type","text/html");
-    response.SetBody(target_string);
+    response.SetHeader("content-type","text/html;charset=utf-8");
+    response.SetBody(target_file_contents);
     Log(request,response);
     response.Send();
     return;
@@ -119,13 +123,78 @@ void HttpServer::HandleApplicationLayer(){
         auto body_string = body_stream.str();
 
         response.SetStatusCode(200);
-        response.SetHeader("content-type","text/html");
+        response.SetHeader("content-type","text/html;charset=utf-8");
         response.SetBody(body_string);
         Log(request,response);
         response.Send();
         return;
     }
 };
+void HttpServer::HandleUpload(HttpRequest&& request, HttpResponse&& response)
+{
+    auto accepted_content_type = std::vector<std::string>{"multipart/form-data","text/plain"};
+    auto content_type = request.GetHeader("Content-Type").value_or("");
+    bool acceptable_type = false;
+    if(content_type == "")
+    {
+        content_type = "text/plain";
+        acceptable_type = true;
+    }
+    else{
+        for(auto type : accepted_content_type)
+        {
+            if(content_type.find(type) != std::string::npos)
+            {
+                acceptable_type = true;
+            }
+        }
+    }
+    if(!acceptable_type)
+    {
+        response.SetStatusCode(415);
+        response.SetHeader("accept" , "multipart/form-data , text/plain");
+        Log(request,response);
+        response.Send();
+        return;
+    }
+    if(!fs::exists(fs::path("../uploads")))
+    {
+        fs::create_directory("../uploads");
+    }
+    if(content_type.find("text/plain") != std::string::npos)
+    {
+        auto file_location = std::string("../uploads/") + "file" + GetshortDate();
+        auto upload_file = std::ofstream(file_location, std::ios::binary);
+        if(!upload_file){
+            response.SetStatusCode(500);
+            Log(request,response);
+            response.Send();
+            return;
+        }
+        try
+        {
+            auto body_buffer = request.GetBody();
+            upload_file.write(((char *)body_buffer.data()),body_buffer.size());
+        }
+        catch(...)
+        {
+            response.SetStatusCode(500);
+            Log(request,response);
+            response.Send();
+            return;
+        }
+    }
+    else if(content_type.find("multipart/form-data") != std::string::npos)
+    {
+        std::cout << "multipart/form-data type with size - " << request.GetBody().size() << "\n";
+
+    }
+    response.SetStatusCode(200);
+    Log(request,response);
+    response.Send();
+    return;
+    
+}
 void HttpServer::ParseConfigFile(std::string file_name){
     if(!fs::exists(fs::path(file_name)))
     {
