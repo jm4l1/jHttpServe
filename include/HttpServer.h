@@ -52,9 +52,10 @@ class HttpServer{
         void ParseConfigFile(std::string);
         void HandleApplicationLayer();
         void HandleApplicationLayerSync(HttpRequest&& , HttpResponse&&);
+        void HandleUpload(HttpRequest&& , HttpResponse&&);
         void Log(const HttpRequest& , const HttpResponse&);
-        std::function<void(std::string , std::promise<std::string>)> handle_parse_layer = [this](std::string message_buffer, std::promise<std::string> &&response_promise){
-             HttpRequest request = HttpRequest(message_buffer);
+        std::function<void(std::vector<unsigned char> , std::promise<std::string>)> handle_parse_layer = [this](std::vector<unsigned char> message_buffer, std::promise<std::string> &&response_promise){
+             HttpRequest request = HttpRequest(std::move(message_buffer));
              HttpResponse response = HttpResponse(std::move(response_promise));
                 response.SetHeader("server",(std::string)_config["server_name"]);
                 response.SetHeader("date" , GetDate());
@@ -75,6 +76,13 @@ class HttpServer{
                  auto date = std::chrono::system_clock::to_time_t(now);
                  std::stringstream date_stream;
                  date_stream << std::put_time(std::gmtime(&date), "%a, %d %b %Y %OH:%M:%S GMT") ;
+                 return date_stream.str();
+        };
+        static std::string GetshortDate(){
+                 auto now = std::chrono::system_clock::now();
+                 auto date = std::chrono::system_clock::to_time_t(now);
+                 std::stringstream date_stream;
+                 date_stream << std::put_time(std::localtime(&date), "%Y%m%d_%OH:%M:%S") ;
                  return date_stream.str();
         };
 };

@@ -1,6 +1,7 @@
 #include "HttpMessage.h"
 #include <sstream>
 #include <iostream>
+#include <iterator>
 
 std::string HttpMessage::ToString() const{
     std::stringstream http_stream;
@@ -9,23 +10,24 @@ std::string HttpMessage::ToString() const{
         http_stream << header.first << ": " << header.second << CR << LF;
     }
     http_stream << CR << LF ;
-    http_stream << _body;
+    http_stream << _body.data();
+    
     return http_stream.str();
 };
 void HttpMessage::SetHeader(std::string header_name ,std::string header_value){
     _headers[header_name] = header_value;
 };
-void HttpMessage::SetBody(const std::string& body){
+void HttpMessage::SetBody(const std::vector<unsigned char>& body){
     _body = body;
     auto body_length_char = _body.size();
     auto body_length_bytes = body_length_char * sizeof(_body[0]);
     SetHeader("content-length",std::to_string(body_length_bytes));
 };
 void HttpMessage::SetBody(const jjson::value& json_body){
-    _body = json_body.to_string();
-    auto body_length_char = _body.size();
-    auto body_length_bytes = body_length_char * sizeof(_body[0]);
-    SetHeader("content-length",std::to_string(body_length_bytes));
+    auto json_buffer = json_body.to_string().c_str();
+    auto json_buffer_size =  json_body.to_string().size() * sizeof(char);
+    _body = std::vector<unsigned char>(json_buffer ,json_buffer + json_buffer_size );
+    SetHeader("content-length",std::to_string(json_buffer_size));
 };
 std::optional<std::string >HttpMessage::GetHeader(std::string header_name) const{
     auto kv_pair = _headers.find(header_name);
@@ -34,41 +36,52 @@ std::optional<std::string >HttpMessage::GetHeader(std::string header_name) const
     }
     return kv_pair->second;
 };
-std::string HttpMessage::GetBody() const{
+std::vector<unsigned char> HttpMessage::GetBody() const{
     return _body;
 };
 void HttpMessage::SetVersion(std::string version){
     _http_version = version;
 };
 
+HttpRequest::HttpRequest(std::vector<unsigned char> &&request_buffer){
+    auto line_end = std::find(request_buffer.begin(),request_buffer.end(),'\r');
+    if(line_end == request_buffer.end()){
+        isValid = false;
+        return;
+    }
 
-HttpRequest::HttpRequest(std::string request_string){
-    auto request_stream = std::istringstream(request_string);
-    std::string stream_line;
-    
     //status line
-    std::getline(request_stream, stream_line);
-    std::stringstream status_line_stream(stream_line);
+    std::stringstream status_line_stream;
+    std::for_each(request_buffer.begin(),line_end,[&](auto c){
+        status_line_stream << c;
+    });
     status_line_stream >> _method >> _request_target >> _http_version;
     if(std::find(Methods.begin(),Methods.end(),_method) == Methods.end()){
         isValid = false;
         return;
     }
-
+    request_buffer.erase(request_buffer.begin(),line_end + 2);
+    line_end = std::find(request_buffer.begin(),request_buffer.end(),'\n');
     //headers
-    while(std::getline(request_stream, stream_line)){
-       std::istringstream header_line_stream(stream_line);
+    while(line_end != request_buffer.end()){
+       std::stringstream header_line_stream;
        std::string header_name, header_value;
+        std::for_each(request_buffer.begin(),line_end,[&](auto c){
+            header_line_stream << c;
+        });
        std::getline(header_line_stream,header_name,':');
        header_line_stream >> header_value;
        SetHeader(header_name,header_value);
+       request_buffer.erase(request_buffer.begin(),line_end + 2);
+       auto next_char = request_buffer[0];
+       if(next_char == '\r'){
+        request_buffer.erase(request_buffer.begin(),request_buffer.begin() +2);
+        break;
+       }
+       line_end = std::find(request_buffer.begin(),request_buffer.end(),'\r');
     }
     //body
-    std::string body_string;
-    while(std::getline(request_stream, stream_line)){
-       body_string.append(stream_line).append("\n");
-    }
-    SetBody(body_string);
+    SetBody(request_buffer);
     isValid = true;
 };
 void HttpRequest::SetMethod(std::string method){
@@ -82,7 +95,6 @@ std::string HttpRequest::GetStartLine() const{
     start_line_stream << _method << " " << _request_target << " " << _http_version;
     return start_line_stream.str();
 };
-
 HttpResponse::HttpResponse(std::string response_string){
      auto request_stream = std::stringstream(response_string);
     std::string stream_line;
