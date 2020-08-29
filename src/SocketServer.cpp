@@ -4,14 +4,17 @@
 #include <thread>
 #include <cstring>
 
-SocketServer::SocketServer(uint16_t PORT):_port(PORT){
+SocketServer::SocketServer(uint16_t PORT):_port(PORT)
+{
     CreateSocket();
 }
-SocketServer::~SocketServer(){
+SocketServer::~SocketServer()
+{
     std::cout << "Terminating Server.\n";
     close(server_fd);
 }
-void SocketServer::CreateSocket(){
+void SocketServer::CreateSocket()
+{
     std::cout << "[CreateSocket] - Starting SocketServer \n";
 
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
@@ -43,30 +46,56 @@ void SocketServer::Listen(std::function<void(std::vector<unsigned char> , std::p
         perror("listen");
         exit(EXIT_FAILURE);
     }
-    while(1){  
-        if ((connect_socket = accept(server_fd, (struct sockaddr *)&address, 
-                                 (socklen_t*)&addrlen))<0){
+    while(1)
+    {
+        if ((connect_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen))<0)
+        {
             perror("accept");
             exit(EXIT_FAILURE);
         }
-        //with threading
-        //handle on child thread
-
-        auto thread_handler = [&](int &&connect_socket){
+        auto thread_handler = [&](int &&connect_socket)
+        {
             socklen_t len = sizeof(address);
             uint16_t port;
             struct sockaddr_in* addressInternet;
             int valread;
-            unsigned char buffer[8192] = {0};
+            unsigned char read_buffer[1024] = {0};
+            std::vector<unsigned char> data_buffer;
             std::promise<std::string> response_prms;
             std::future<std::string> ftr = response_prms.get_future();
-             if(getpeername(connect_socket, &address,&len) == 0){
+            
+            if(getpeername(connect_socket, &address,&len) == 0)
+            {
                 addressInternet = (struct sockaddr_in*) &address;
-                port = ntohs ( addressInternet->sin_port );    
-                // std::cout << "Connection received from on child thread " << inet_ntoa( addressInternet->sin_addr) << " on port " << port << "\n";
+                port = ntohs ( addressInternet->sin_port );
             }
-            valread = read( connect_socket , buffer, 8192);
-            connection_callback(std::vector<unsigned char>(buffer ,buffer + valread),std::move(response_prms));
+            
+            //a time out to allow multiple calls to read system cal.
+            //select checks the socket is readeable for this timeout value
+            //if it become readable with in the time out the read method is called
+            struct timeval timeout;
+            timeout.tv_sec = 0;
+            timeout.tv_usec = 5000;
+            fd_set read_set;
+            FD_ZERO(&read_set);
+            FD_SET(connect_socket , &read_set);
+            
+            //read value on connected socket and append to data_buffer
+            valread = recv( connect_socket , read_buffer, 1024 ,0 ) ;
+            data_buffer.insert(data_buffer.end(),read_buffer , read_buffer + valread);
+            memset(read_buffer, 0 , 1024 );
+
+            //wait timeout to see if socket is readable and read again if it is
+            select(connect_socket + 1 , &read_set, nullptr , nullptr ,&timeout);
+            while(FD_ISSET(connect_socket , &read_set))
+            {
+                valread = read( connect_socket , read_buffer, 1024 ) ;
+                data_buffer.insert(data_buffer.end(),read_buffer , read_buffer + valread);
+                memset(read_buffer, 0 , 1024 );
+                select(connect_socket + 1 , &read_set, nullptr , nullptr ,&timeout);
+            }
+
+            connection_callback(data_buffer,std::move(response_prms));
             auto response = ftr.get();
             write(connect_socket,response.c_str(),response.size());
             shutdown(connect_socket,SHUT_WR);
@@ -74,38 +103,6 @@ void SocketServer::Listen(std::function<void(std::vector<unsigned char> , std::p
         };
         auto t = std::async(std::launch::async,thread_handler,std::move(connect_socket));
         t.get();
-        // if(getpeername(connect_socket, &address,&len) == 0){
-        //     addressInternet = (struct sockaddr_in*) &address;
-        //     port = ntohs ( addressInternet->sin_port );    
-        //     // std::cout<< "Process created with pid " << pid << "\n";
-        //     std::cout << "Connection received from on main thread " << inet_ntoa( addressInternet->sin_addr) << " on port " << port << "\n";
-        // }
-        // close(connect_socket);
-    //     //with forking
-    //     pid = fork();
-    //     if(pid == 0){
-    //        close(server_fd);
-    //        server_fd = -1;
-    //         if(getpeername(new_socket, &address,&len) == 0){
-    //             addressInternet = (struct sockaddr_in*) &address;
-    //             port = ntohs ( addressInternet->sin_port );    
-    //             std::cout << "Connection received from " << inet_ntoa( addressInternet->sin_addr) << " on port " << port << "\n";
-    //         }
-    //         valread = read( new_socket , buffer, 1024);
-    //         callback(std::string(buffer),new_socket);
-    //         shutdown(new_socket,SHUT_WR);
-    //         close(new_socket);
-    //         new_socket = -1;
-    //         exit(EXIT_SUCCESS);
-    //    }
-    //     else{
-    //         if(getpeername(new_socket, &address,&len) == 0){
-    //             addressInternet = (struct sockaddr_in*) &address;
-    //             port = ntohs ( addressInternet->sin_port );    
-    //             std::cout<< "\nProcess created with pid " << pid << "\n";
-    //             std::cout << "Connection received from " << inet_ntoa( addressInternet->sin_addr) << " on port " << port << "\n";
-    //         }
-    //     }
     }    
 }
 void SocketServer::Write(const char * Message){;

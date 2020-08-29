@@ -14,6 +14,7 @@
 #include <sstream>
 #include <string>
 #include <future>
+#include <vector>
 
 #define  STDOUT_FD 1
 
