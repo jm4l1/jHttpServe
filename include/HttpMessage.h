@@ -30,13 +30,13 @@ static std::unordered_map<int,std::string> ResponseCodes = {
     {504 , "Gateway Timeout"},
     {505 , "HTTP Version Not Supported"}
 };
-class HttpMessage{
+class HttpMessage
+{
     public:
         HttpMessage() = default;
         virtual ~HttpMessage(){};
-        std::string ToString() const;
+        const char* ToString() const;
         void SetHeader(std::string,std::string);
-        // void SetBody(const std::string&);
         void SetBody(const jjson::value&);
         void SetBody(const std::vector<unsigned char>&);
         std::optional<std::string> GetHeader(std::string) const;
@@ -48,23 +48,27 @@ class HttpMessage{
         std::vector<unsigned char> _body;
         std::string _http_version = "HTTP/1.1";
 };
-class HttpRequest : public HttpMessage{
+class HttpRequest : public HttpMessage
+{
     public:
         HttpRequest():HttpMessage(){};
         HttpRequest(std::string);
         HttpRequest(std::vector<unsigned char> &&);
-        HttpRequest(const HttpRequest&B){
+        HttpRequest(const HttpRequest&B)
+        {
             this->_method = B._method;
             this->_request_target = B._request_target;
             this->isValid = B.isValid;
         };
-        HttpRequest(HttpRequest&& B){
+        HttpRequest(HttpRequest&& B)
+        {
             this->_method = B._method;
             this->_request_target = B._request_target;
             this->isValid = B.isValid;
         };
         HttpRequest& operator=(const HttpRequest& B)=delete;
-        HttpRequest& operator=(HttpRequest&& B){
+        HttpRequest& operator=(HttpRequest&& B)
+        {
             this->_method = B._method;
             this->_request_target = B._request_target;
             this->isValid = B.isValid;
@@ -81,10 +85,12 @@ class HttpRequest : public HttpMessage{
         std::string _method;
         std::string _request_target;
 };
-class HttpResponse : public HttpMessage{
+class HttpResponse : public HttpMessage
+{
     public:
         HttpResponse():HttpMessage(){};
-        HttpResponse(HttpResponse&& B){
+        HttpResponse(HttpResponse&& B)
+        {
             this->_status_code = B._status_code;
             this->_reason_phrase = B._reason_phrase;
             this->_http_version = B._http_version;
@@ -92,7 +98,8 @@ class HttpResponse : public HttpMessage{
         };
         HttpResponse(std::promise<std::string> &&promise):response_promise(std::move(promise)),_http_version("HTTP/1.1"){};
         HttpResponse(std::string);
-        HttpResponse& operator=(HttpResponse&& B){
+        HttpResponse& operator=(HttpResponse&& B)
+        {
             this->_status_code = B._status_code;
             this->_reason_phrase = B._reason_phrase;
             this->_http_version = B._http_version;

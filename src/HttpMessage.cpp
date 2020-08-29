@@ -3,19 +3,20 @@
 #include <iostream>
 #include <iterator>
 
-std::string HttpMessage::ToString() const{
+const char* HttpMessage::ToString() const{
     std::stringstream http_stream;
     http_stream << GetStartLine() << CR << LF;
     for(auto header : _headers){
         http_stream << header.first << ": " << header.second << CR << LF;
     }
     http_stream << CR << LF ;
+
     if(_body.size() >  0)
     {
         http_stream << _body.data();
     }
     
-    return http_stream.str();
+    return http_stream.str().data();
 };
 void HttpMessage::SetHeader(std::string header_name ,std::string header_value){
     _headers[header_name] = header_value;

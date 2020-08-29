@@ -51,8 +51,9 @@ class HttpServer{
         std::vector<std::string> _allowed_methods;
         void ParseConfigFile(std::string);
         void HandleApplicationLayer();
-        void HandleApplicationLayerSync(HttpRequest&& , HttpResponse&&);
-        void HandleUpload(HttpRequest&& , HttpResponse&&);
+        void HandleApplicationLayerSync(HttpRequest&&, HttpResponse&&);
+        void HandleUpload(HttpRequest&&, HttpResponse&&);
+        void HandleGetUploads(HttpRequest&&, HttpResponse&&);
         void Log(const HttpRequest& , const HttpResponse&);
         std::function<void(std::vector<unsigned char> , std::promise<std::string>)> handle_parse_layer = [this](std::vector<unsigned char> message_buffer, std::promise<std::string> &&response_promise){
              HttpRequest request = HttpRequest(std::move(message_buffer));
@@ -71,14 +72,35 @@ class HttpServer{
             // return;
             HandleApplicationLayerSync(std::move(request),std::move(response));
         };
-        static std::string GetDate(){
+
+        void ValidateMethod(std::string method ,const HttpRequest& request, HttpResponse& response)
+        {
+            std::stringstream body_stream;
+            auto method_itr = std::find(_allowed_methods.begin(),_allowed_methods.end(),method);
+            if(method_itr ==_allowed_methods.end())
+            {
+                response.SetStatusCode(405);
+                std::stringstream allowed_stream;
+                std::ostream_iterator<std::string> outputString(allowed_stream , ",");
+                std::copy(_allowed_methods.begin(),_allowed_methods.end(),outputString);
+                response.SetHeader("allow",allowed_stream.str());
+                body_stream << "<body><div><H1>405 Method Not Allowed</H1>" << allowed_stream.str() << "</div></body>";
+                response.SetBody(body_stream.str());
+                Log(request,response);
+                response.Send();
+                return;
+            }
+        }
+        static std::string GetDate()
+        {
                  auto now = std::chrono::system_clock::now();
                  auto date = std::chrono::system_clock::to_time_t(now);
                  std::stringstream date_stream;
                  date_stream << std::put_time(std::gmtime(&date), "%a, %d %b %Y %OH:%M:%S GMT") ;
                  return date_stream.str();
         };
-        static std::string GetshortDate(){
+        static std::string GetshortDate()
+        {
                  auto now = std::chrono::system_clock::now();
                  auto date = std::chrono::system_clock::to_time_t(now);
                  std::stringstream date_stream;
