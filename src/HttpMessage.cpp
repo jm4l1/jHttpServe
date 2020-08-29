@@ -10,7 +10,10 @@ std::string HttpMessage::ToString() const{
         http_stream << header.first << ": " << header.second << CR << LF;
     }
     http_stream << CR << LF ;
-    http_stream << _body.data();
+    if(_body.size() >  0)
+    {
+        http_stream << _body.data();
+    }
     
     return http_stream.str();
 };
@@ -70,7 +73,7 @@ HttpRequest::HttpRequest(std::vector<unsigned char> &&request_buffer){
             header_line_stream << c;
         });
        std::getline(header_line_stream,header_name,':');
-       header_line_stream >> header_value;
+       std::getline(header_line_stream,header_value ,'\r');
        SetHeader(header_name,header_value);
        request_buffer.erase(request_buffer.begin(),line_end + 2);
        auto next_char = request_buffer[0];

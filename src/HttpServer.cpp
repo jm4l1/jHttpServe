@@ -20,9 +20,16 @@ void HttpServer::Init(std::string config_file_name)
 {
     ParseConfigFile(config_file_name);
     int port = (int)_config["port"];
-    _socket_server.SetPort(port);
-    _socket_server.CreateSocket();
-    _socket_server.Listen(handle_parse_layer);
+    try
+    {
+        _socket_server.SetPort(port);
+        _socket_server.CreateSocket();
+        _socket_server.Listen(handle_parse_layer);
+    }
+    catch(...)
+    {
+        exit(EXIT_FAILURE);
+    }
     // std::thread socket_thread([this](){
     //     _socket_server.Listen(handle_parse_layer);
     // });
@@ -186,8 +193,37 @@ void HttpServer::HandleUpload(HttpRequest&& request, HttpResponse&& response)
     }
     else if(content_type.find("multipart/form-data") != std::string::npos)
     {
-        std::cout << "multipart/form-data type with size - " << request.GetBody().size() << "\n";
-
+        auto boundary_start = content_type.find("boundary");
+        if(boundary_start == std::string::npos)
+        {
+            response.SetStatusCode(400);
+            Log(request,response);
+            response.Send();
+            return;
+        }
+        auto boundary_param = std::string(content_type.begin() + boundary_start,content_type.end());
+        boundary_start = boundary_param.find("=");
+        if(boundary_start == std::string::npos)
+        {
+            response.SetStatusCode(400);
+            Log(request,response);
+            response.Send();
+            return;
+        }
+        auto boundary_value = std::string(boundary_param.begin() + boundary_start + 1,boundary_param.end());
+        auto body_buffer = request.GetBody();
+        body_buffer.erase(body_buffer.begin(),body_buffer.begin() + boundary_value.size());
+        //get headers
+        auto headers_end = std::string((char *)body_buffer.data()).find("\r\n\r\n");
+        if(headers_end == std::string::npos)
+        {
+            response.SetStatusCode(500);
+            Log(request,response);
+            response.Send();
+            return;
+        }
+        auto headers_string = std::string((char *)body_buffer.data() , (char *)body_buffer.data()+headers_end);
+        std::cout << "header string is " << headers_string << "\n";
     }
     response.SetStatusCode(200);
     Log(request,response);
