@@ -35,7 +35,8 @@ class HttpMessage
     public:
         HttpMessage() = default;
         virtual ~HttpMessage(){};
-        const char* ToString() const;
+        std::string ToString() const;
+        std::vector<unsigned char> ToBuffer() const;
         void SetHeader(std::string,std::string);
         void SetBody(const jjson::value&);
         void SetBody(const std::vector<unsigned char>&);
@@ -96,7 +97,7 @@ class HttpResponse : public HttpMessage
             this->_http_version = B._http_version;
             this->response_promise = std::move(response_promise);
         };
-        HttpResponse(std::promise<std::string> &&promise):response_promise(std::move(promise)),_http_version("HTTP/1.1"){};
+        HttpResponse(std::promise<std::vector<unsigned char> > &&promise):response_promise(std::move(promise)),_http_version("HTTP/1.1"){};
         HttpResponse(std::string);
         HttpResponse& operator=(HttpResponse&& B)
         {
@@ -116,6 +117,6 @@ class HttpResponse : public HttpMessage
         int _status_code;
         std::string _reason_phrase;
         std::string _http_version;
-        std::promise<std::string> response_promise;
+        std::promise<std::vector<unsigned char> > response_promise;
 };
 #endif

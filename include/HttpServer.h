@@ -55,7 +55,7 @@ class HttpServer{
         void HandleUpload(HttpRequest&&, HttpResponse&&);
         void HandleGetUploads(HttpRequest&&, HttpResponse&&);
         void Log(const HttpRequest& , const HttpResponse&);
-        std::function<void(std::vector<unsigned char> , std::promise<std::string>)> handle_parse_layer = [this](std::vector<unsigned char> message_buffer, std::promise<std::string> &&response_promise){
+        std::function<void(std::vector<unsigned char> , std::promise<std::vector<unsigned char> >)> handle_parse_layer = [this](std::vector<unsigned char> message_buffer, std::promise<std::vector<unsigned char> > &&response_promise){
              HttpRequest request = HttpRequest(std::move(message_buffer));
              HttpResponse response = HttpResponse(std::move(response_promise));
                 response.SetHeader("server",(std::string)_config["server_name"]);

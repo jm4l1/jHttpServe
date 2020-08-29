@@ -34,7 +34,7 @@ void SocketServer::CreateSocket()
     }
     std::cout << "[CreateSocket] - Socket bound to port " << _port << "\n";
 }
-void SocketServer::Listen(std::function<void(std::vector<unsigned char> , std::promise<std::string>&& )> connection_callback){
+void SocketServer::Listen(std::function<void(std::vector<unsigned char> , std::promise<std::vector<unsigned char> >&& )> connection_callback){
     int connect_socket;
     int addrlen = sizeof(address);
     struct sockaddr address;
@@ -61,8 +61,8 @@ void SocketServer::Listen(std::function<void(std::vector<unsigned char> , std::p
             int valread;
             unsigned char read_buffer[1024] = {0};
             std::vector<unsigned char> data_buffer;
-            std::promise<std::string> response_prms;
-            std::future<std::string> ftr = response_prms.get_future();
+            std::promise<std::vector<unsigned char> > response_prms;
+            std::future<std::vector<unsigned char> > ftr = response_prms.get_future();
             
             if(getpeername(connect_socket, &address,&len) == 0)
             {
@@ -97,7 +97,7 @@ void SocketServer::Listen(std::function<void(std::vector<unsigned char> , std::p
 
             connection_callback(data_buffer,std::move(response_prms));
             auto response = ftr.get();
-            write(connect_socket,response.c_str(),response.size());
+            write(connect_socket,response.data(),response.size());
             shutdown(connect_socket,SHUT_WR);
             close(connect_socket);
         };
