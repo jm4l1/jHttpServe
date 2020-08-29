@@ -212,7 +212,7 @@ void HttpServer::HandleUpload(HttpRequest&& request, HttpResponse&& response)
         }
         auto boundary_value = std::string(boundary_param.begin() + boundary_start + 1,boundary_param.end());
         auto body_buffer = request.GetBody();
-        body_buffer.erase(body_buffer.begin(),body_buffer.begin() + boundary_value.size());
+        body_buffer.erase(body_buffer.begin(),body_buffer.begin() + boundary_value.size() + 4);
         //get headers
         auto headers_end = std::string((char *)body_buffer.data()).find("\r\n\r\n");
         if(headers_end == std::string::npos)
@@ -222,9 +222,53 @@ void HttpServer::HandleUpload(HttpRequest&& request, HttpResponse&& response)
             response.Send();
             return;
         }
-        auto headers_string = std::string((char *)body_buffer.data() , (char *)body_buffer.data()+headers_end);
-        std::cout << "header string is " << headers_string << "\n";
+        auto headers_string = std::string((char *)body_buffer.data() , ((char *)body_buffer.data())+ headers_end );
+        body_buffer.erase(body_buffer.begin(),body_buffer.begin() + headers_end + 4);
+        std::string file_name;
+        ssize_t f_start;
+        if((f_start =headers_string.find("filename")) != std::string::npos)
+        {
+            auto name_start = headers_string.find_first_of('"' ,f_start);
+            auto name_end = headers_string.find_first_of('"',name_start + 1);
+            file_name = std::string(headers_string.begin() + name_start + 1, headers_string.begin() + name_end);
+        }
+        else if((f_start =headers_string.find("name=")) != std::string::npos)
+        {
+            auto name_start = headers_string.find_first_of('"' ,f_start);
+            auto name_end = headers_string.find_first_of('"',name_start);
+            file_name = std::string(headers_string.begin() + name_start, headers_string.begin() + name_end);
+        }
+        else
+        {
+            file_name = "file" + GetshortDate();
+        }
+        auto file_location = std::string("../uploads/") + file_name;
+        auto upload_file = std::ofstream(file_location, std::ios::binary);
+        if(!upload_file){
+            response.SetStatusCode(500);
+            Log(request,response);
+            response.Send();
+            return;
+        }
+        try
+        {
+            std::cout << std::hex <<  "bb : " << body_buffer.data() << "\n";
+            upload_file.write(((char *)body_buffer.data()),body_buffer.size());
+        }
+        catch(...)
+        {
+            response.SetStatusCode(500);
+            Log(request,response);
+            response.Send();
+            return;
+        }
+
     }
+    response.SetHeader("content-type","application/json");
+    auto api_object = jjson::Object();
+    api_object["status"] = "Success!!!";
+    api_object["message"] = "Upload Complete";
+    response.SetBody(api_object);
     response.SetStatusCode(200);
     Log(request,response);
     response.Send();
