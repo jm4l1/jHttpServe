@@ -26,7 +26,7 @@ jHttpServe currently support building on Linux and MacOs.
 2. Init git submodules `git submodule init`
 3. Checkout master branch of submoduke `cd lib && git checkout master`
 4. Make a build directory in the top level directory: `mkdir build && cd build`
-5. Compile: `cmake .. && make`
+5. Compile: `export CXX=<path_to_g++9> && export CC=<path_to_gcc9> && cmake .. && make`
 6. Run it: `./jHttpServe`.
 
 ## Using the application
