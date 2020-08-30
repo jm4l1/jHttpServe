@@ -4,7 +4,7 @@
 #include <thread>
 #include <cstring>
 
-SocketServer::SocketServer(uint16_t PORT):_port(PORT)
+SocketServer::SocketServer(uint16_t PORT, int timeout):_port(PORT),_timeout(timeout)
 {
     CreateSocket();
 }
@@ -34,7 +34,7 @@ void SocketServer::CreateSocket()
     }
     std::cout << "[CreateSocket] - Socket bound to port " << _port << "\n";
 }
-void SocketServer::Listen(std::function<void(std::vector<unsigned char> , std::promise<std::string>&& )> connection_callback){
+void SocketServer::Listen(std::function<void(std::vector<unsigned char> , std::promise<std::vector<unsigned char> >&& )> connection_callback){
     int connect_socket;
     int addrlen = sizeof(address);
     struct sockaddr address;
@@ -61,44 +61,44 @@ void SocketServer::Listen(std::function<void(std::vector<unsigned char> , std::p
             int valread;
             unsigned char read_buffer[1024] = {0};
             std::vector<unsigned char> data_buffer;
-            std::promise<std::string> response_prms;
-            std::future<std::string> ftr = response_prms.get_future();
+            std::promise<std::vector<unsigned char> > response_prms;
+            std::future<std::vector<unsigned char> > ftr = response_prms.get_future();
             
             if(getpeername(connect_socket, &address,&len) == 0)
             {
                 addressInternet = (struct sockaddr_in*) &address;
                 port = ntohs ( addressInternet->sin_port );
             }
-            
             //a time out to allow multiple calls to read system cal.
             //select checks the socket is readeable for this timeout value
             //if it become readable with in the time out the read method is called
             struct timeval timeout;
             timeout.tv_sec = 0;
-            timeout.tv_usec = 5000;
+            timeout.tv_usec = _timeout;
             fd_set read_set;
             FD_ZERO(&read_set);
             FD_SET(connect_socket , &read_set);
             
-            //read value on connected socket and append to data_buffer
-            valread = recv( connect_socket , read_buffer, 1024 ,0 ) ;
-            data_buffer.insert(data_buffer.end(),read_buffer , read_buffer + valread);
-            memset(read_buffer, 0 , 1024 );
-
-            //wait timeout to see if socket is readable and read again if it is
             select(connect_socket + 1 , &read_set, nullptr , nullptr ,&timeout);
-            while(FD_ISSET(connect_socket , &read_set))
+            //wait timeout to see if socket is readable and read again if it is
+            if(FD_ISSET(connect_socket , &read_set))
             {
-                valread = read( connect_socket , read_buffer, 1024 ) ;
-                data_buffer.insert(data_buffer.end(),read_buffer , read_buffer + valread);
-                memset(read_buffer, 0 , 1024 );
-                select(connect_socket + 1 , &read_set, nullptr , nullptr ,&timeout);
+                while(FD_ISSET(connect_socket , &read_set))
+                {
+                    valread = read( connect_socket , read_buffer, 1024 ) ;
+                    data_buffer.insert(data_buffer.end(),read_buffer , read_buffer + valread);
+                    memset(read_buffer, 0 , 1024 );
+                    select(connect_socket + 1 , &read_set, nullptr , nullptr ,&timeout);
+                }
+                connection_callback(data_buffer,std::move(response_prms));
+                auto response = ftr.get();
+                // std::cout << "[SocketServer] - thread_execution Completed on " << port << "\n";
+                write(connect_socket,response.data(),response.size());
             }
-
-            connection_callback(data_buffer,std::move(response_prms));
-            auto response = ftr.get();
-            write(connect_socket,response.c_str(),response.size());
-            shutdown(connect_socket,SHUT_WR);
+            else
+            {
+                // std::cout << "[SocketServer] - Closing port " << port << ", Connection time out\n";
+            }
             close(connect_socket);
         };
         auto t = std::async(std::launch::async,thread_handler,std::move(connect_socket));

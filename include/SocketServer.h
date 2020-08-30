@@ -21,15 +21,17 @@
 class SocketServer{
     public:
         SocketServer() = default;
-        SocketServer(uint16_t PORT);
+        SocketServer(uint16_t PORT , int timeout = 5000);
         ~SocketServer();
-        void SetPort(uint16_t PORT){ _port = PORT ;};
+        void SetPort(uint16_t PORT){ _port = PORT;};
+        void SetTimeout(int timeout){ _timeout = timeout;};
         void CreateSocket(void);
-        void Listen(std::function<void(std::vector<unsigned char> , std::promise<std::string>&&)> callback);
+        void Listen(std::function<void(std::vector<unsigned char> , std::promise<std::vector<unsigned char>>&&)> callback);
         void Write(const char* Message);
     private:
         int server_fd;
         uint16_t _port;
         struct sockaddr_in address;
+        int _timeout;
 };
 #endif

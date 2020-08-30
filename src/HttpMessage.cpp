@@ -10,12 +10,38 @@ std::string HttpMessage::ToString() const{
         http_stream << header.first << ": " << header.second << CR << LF;
     }
     http_stream << CR << LF ;
+
     if(_body.size() >  0)
     {
         http_stream << _body.data();
     }
     
-    return http_stream.str();
+    return http_stream.str().data();
+};
+
+std::vector<unsigned char>  HttpMessage::ToBuffer() const{
+    std::vector<unsigned char> message_buffer;
+    auto start_line = GetStartLine();
+    message_buffer.insert(message_buffer.end(),start_line.begin(),start_line.end());
+    message_buffer.insert(message_buffer.end(),CR);
+    message_buffer.insert(message_buffer.end(),LF);
+    for(auto header : _headers){
+        message_buffer.insert(message_buffer.end(),header.first.begin(),header.first.end());
+        message_buffer.insert(message_buffer.end(),':');
+        message_buffer.insert(message_buffer.end(),' ');
+        message_buffer.insert(message_buffer.end(),header.second.begin(),header.second.end());
+        message_buffer.insert(message_buffer.end(),CR);
+        message_buffer.insert(message_buffer.end(),LF);
+    }
+    message_buffer.insert(message_buffer.end(),CR);
+    message_buffer.insert(message_buffer.end(),LF);
+
+    if(_body.size() >  0)
+    {
+        message_buffer.insert(message_buffer.end(),_body.begin(),_body.end());
+    }
+    
+    return message_buffer;
 };
 void HttpMessage::SetHeader(std::string header_name ,std::string header_value){
     _headers[header_name] = header_value;
@@ -137,5 +163,5 @@ std::string HttpResponse::GetStartLine() const{
 
 };
 void HttpResponse::Send(){
-    response_promise.set_value(this->ToString());
+    response_promise.set_value(this->ToBuffer());
 }
