@@ -1,4 +1,4 @@
-#jHttpServe : A Basic HTTP/1.1 Server
+## jHttpServe : A Basic HTTP/1.1 Server
 
 This is a basic implementation of an Hypertext Transer Protocol (HTTP) based on the following RFCs. It implements the basic funcitonality of HTTP/1.1, allowing for retreival and uploading of files.
 * [RFC 7230](https://tools.ietf.org/html/rfc7230) - Hypertext Transfer Protocol (HTTP/1.1): Message Syntax and Routing
