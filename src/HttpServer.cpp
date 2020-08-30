@@ -27,6 +27,7 @@ void HttpServer::Init(std::string config_file_name)
     try
     {
         _socket_server.SetPort(port);
+        _socket_server.SetTimeout((int)_config["timeout"]);
         _socket_server.CreateSocket();
         _socket_server.Listen(handle_parse_layer);
     }
@@ -108,6 +109,7 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
                 return;
             }
             
+            target_file.unsetf(std::ios::skipws);
             std::vector<unsigned char> target_file_contents((std::istream_iterator<char>(target_file)), std::istream_iterator<char>());
             
             response.SetStatusCode(200);
@@ -252,6 +254,7 @@ void HttpServer::HandleUpload(HttpRequest&& request, HttpResponse&& response)
         auto boundary_value = std::string(boundary_param.begin() + boundary_start + 1,boundary_param.end());
         auto body_buffer = request.GetBody();
         body_buffer.erase(body_buffer.begin(),body_buffer.begin() + boundary_value.size() + 4);
+        body_buffer.erase(std::search(body_buffer.begin(), body_buffer.end(), boundary_value.begin(), boundary_value.end()) - 2 , body_buffer.end());
         //get headers
         auto headers_end = std::string((char *)body_buffer.data()).find("\r\n\r\n");
         if(headers_end == std::string::npos)
@@ -394,5 +397,5 @@ void HttpServer::ParseConfigFile(std::string file_name)
     else{
         _allowed_methods = Methods;
     }
-    std::cout << "config file loaded\n";
+    std::cout << "Config file loaded!\n";
 }

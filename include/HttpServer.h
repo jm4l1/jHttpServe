@@ -60,7 +60,7 @@ class HttpServer{
              HttpResponse response = HttpResponse(std::move(response_promise));
                 response.SetHeader("server",(std::string)_config["server_name"]);
                 response.SetHeader("date" , GetDate());
-                response.SetHeader("Connection","close");
+                response.SetHeader("connection","close");
              if(!request.isValid){
                 response.SetStatusCode(400);
                 Log(request,response);
