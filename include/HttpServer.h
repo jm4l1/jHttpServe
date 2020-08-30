@@ -6,6 +6,7 @@
 #include <deque>
 #include <chrono>
 #include <iomanip>
+#include <iterator>
 
 #include "HttpMessage.h"
 #include "jjson.hpp"
