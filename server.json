@@ -3,5 +3,5 @@
     "timeout" : 5000,
     "server_name" :"Http Server / 1.0",
     "allowed_methods" : ["GET","OPTIONS","POST","DELETE"],
-    "web_dir" : "/Users/mali/Developer/mali/cppfiles/CppND-Capstone-http-server/www"
+    "web_dir" : "../www"
 }
