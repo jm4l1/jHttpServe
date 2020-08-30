@@ -1,12 +1,12 @@
 ## jHttpServe : A Basic HTTP/1.1 Server
 
-This is a basic implementation of an Hypertext Transer Protocol (HTTP) based on the following RFCs. It implements the basic funcitonality of HTTP/1.1, allowing for retreival and uploading of files.
+This is a basic implementation of an Hypertext Transfer Protocol (HTTP) based on the following RFCs. It implements the basic functionality of HTTP/1.1, allowing for retrieval and uploading of files.
 * [RFC 7230](https://tools.ietf.org/html/rfc7230) - Hypertext Transfer Protocol (HTTP/1.1): Message Syntax and Routing
 * [RFC 7231](https://tools.ietf.org/html/rfc7231) - Hypertext Transfer Protocol (HTTP/1.1): Semantics and Content
 * [RFC 7578](https://tools.ietf.org/html/rfc7578) - Returning Values from Forms: multipart/form-data
 
 ## Supported Operated Systems
-Http
+jHttpServe currently support building on Linux and MacOs.
 
 ## Dependencies for Running Locally
 * cmake >= 3.7
