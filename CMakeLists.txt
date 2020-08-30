@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.7)
-set(project capstoneHttp)
-project(capstoneHttp)
+set(project jHttpServe)
+project(jHttpServe)
 
 find_package( Threads REQUIRED)
 add_definitions(-std=c++17)

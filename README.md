@@ -1,9 +1,12 @@
-# CPPND: Capstone HTTP Server
+#jHttpServe : A Basic HTTP/1.1 Server
 
-This is the Capstone project for in the [Udacity C++ Nanodegree Program](https://www.udacity.com/course/c-plus-plus-nanodegree--nd213). This is a basic implementation of an Hypertext Transer Protocol (HTTP) based on the following RFCs.
+This is a basic implementation of an Hypertext Transer Protocol (HTTP) based on the following RFCs. It implements the basic funcitonality of HTTP/1.1, allowing for retreival and uploading of files.
 * [RFC 7230](https://tools.ietf.org/html/rfc7230) - Hypertext Transfer Protocol (HTTP/1.1): Message Syntax and Routing
 * [RFC 7231](https://tools.ietf.org/html/rfc7231) - Hypertext Transfer Protocol (HTTP/1.1): Semantics and Content
 * [RFC 7578](https://tools.ietf.org/html/rfc7578) - Returning Values from Forms: multipart/form-data
+
+## Supported Operated Systems
+Http
 
 ## Dependencies for Running Locally
 * cmake >= 3.7
@@ -26,14 +29,14 @@ This is the Capstone project for in the [Udacity C++ Nanodegree Program](https:/
 3. Checkout master branch of submoduke `cd lib && git checkout master`
 4. Make a build directory in the top level directory: `mkdir build && cd build`
 5. Compile: `cmake .. && make`
-6. Run it: `./capstoneHttp`.
+6. Run it: `./jHttpServe`.
 
 ## Using the application
 Run application with `-h` flag to get help menu
 ```bash
 $ cd build
-$ ./capstoneHttp -h
-Usage: ./capstoneHttp [-f config_file] [-h] [-p port] [-t timeout]
+$ ./jHttpServe -h
+Usage: ./jHttpServe [-f config_file] [-h] [-p port] [-t timeout]
 	-f config_file : location of configuration file in .json format
 	-p port : Tcp port to accept server connections
 	-t timeoutt : Time out of server to close connection
@@ -52,7 +55,7 @@ Run application with `-f` specifying a JSON configuration file. The configuratio
 ```
 A config file must be specified and exists. The file must contain the `port` & `web_dir` values or the application throws an error an exists.
 ```bash
-$./capstoneHttp -f ../server.json
+$./jHttpServe -f ../server.json
 config file loaded
 [CreateSocket] - Starting SocketServer
 [CreateSocket] - Socket Created Successfully with FD:  3
