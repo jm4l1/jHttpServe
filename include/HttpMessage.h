@@ -58,6 +58,9 @@ class HttpRequest : public HttpMessage
         HttpRequest(const HttpRequest&B)
         {
             this->_method = B._method;
+            this->_headers =B._headers;
+            this->_body =B._body;
+            this->_http_version =B._http_version;
             this->_request_target = B._request_target;
             this->isValid = B.isValid;
         };
@@ -66,6 +69,9 @@ class HttpRequest : public HttpMessage
             this->_method = B._method;
             this->_request_target = B._request_target;
             this->isValid = B.isValid;
+            this->_headers =B._headers;
+            this->_body =B._body;
+            this->_http_version =B._http_version;
         };
         HttpRequest& operator=(const HttpRequest& B)=delete;
         HttpRequest& operator=(HttpRequest&& B)
@@ -73,6 +79,9 @@ class HttpRequest : public HttpMessage
             this->_method = B._method;
             this->_request_target = B._request_target;
             this->isValid = B.isValid;
+            this->_headers =B._headers;
+            this->_body =B._body;
+            this->_http_version =B._http_version;
             return *this;
         };
         ~HttpRequest(){};
@@ -95,7 +104,10 @@ class HttpResponse : public HttpMessage
             this->_status_code = B._status_code;
             this->_reason_phrase = B._reason_phrase;
             this->_http_version = B._http_version;
-            this->response_promise = std::move(response_promise);
+            this->_headers =B._headers;
+            this->_body =B._body;
+            this->_http_version =B._http_version;
+            this->response_promise = std::move(B.response_promise);
         };
         HttpResponse(std::promise<std::vector<unsigned char> > &&promise):response_promise(std::move(promise)),_http_version("HTTP/1.1"){};
         HttpResponse(std::string);
@@ -104,7 +116,10 @@ class HttpResponse : public HttpMessage
             this->_status_code = B._status_code;
             this->_reason_phrase = B._reason_phrase;
             this->_http_version = B._http_version;
-            this->response_promise = std::move(response_promise);
+            this->_headers =B._headers;
+            this->_body =B._body;
+            this->_http_version =B._http_version;
+            this->response_promise = std::move(B.response_promise);
             return *this;
         };
         ~HttpResponse(){};
