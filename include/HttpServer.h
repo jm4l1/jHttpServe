@@ -68,10 +68,10 @@ class HttpServer{
                 response.Send();
                 return;
              }
-            //  auto req_res = std::make_pair(std::move(request),std::move(response));
-            // _request_queue.Send(std::move(req_res));
-            // return;
-            HandleApplicationLayerSync(std::move(request),std::move(response));
+             auto req_res = std::make_pair(std::move(request),std::move(response));
+            _request_queue.Send(std::move(req_res));
+            return;
+            // HandleApplicationLayerSync(std::move(request),std::move(response));
         };
 
         void ValidateMethod(std::string method ,const HttpRequest& request, HttpResponse& response)

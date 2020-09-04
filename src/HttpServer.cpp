@@ -24,24 +24,13 @@ void HttpServer::Init(std::string config_file_name)
         _config["upload_dir"] = "../uploads";
     }
     int port = (int)_config["port"];
-    try
-    {
-        _socket_server.SetPort(port);
-        _socket_server.SetTimeout((int)_config["timeout"]);
-        _socket_server.CreateSocket();
+    _socket_server.SetPort(port);
+    _socket_server.SetTimeout((int)_config["timeout"]);
+    _socket_server.CreateSocket();
+    auto socket_thread = std::async(std::launch::async, [this](){
         _socket_server.Listen(handle_parse_layer);
-    }
-    catch(...)
-    {
-        exit(EXIT_FAILURE);
-    }
-    // std::thread socket_thread([this](){
-    //     _socket_server.Listen(handle_parse_layer);
-    // });
-    // auto  app_logic_thread = std::thread(&HttpServer::HandleApplicationLayer , this);
-    // app_logic_thread.detach();
-    // socket_thread.join();
-
+    });
+    auto app_logic_thread = std::async(std::launch::async, &HttpServer::HandleApplicationLayer , this);
 };
 void HttpServer::Log(const HttpRequest &request, const HttpResponse &response)
 {
@@ -49,12 +38,11 @@ void HttpServer::Log(const HttpRequest &request, const HttpResponse &response)
     auto status_code = response.GetStatusCode();
     auto formatted_status_start = status_code < 200  ? "\033[1;34m"  : status_code < 300 ? "\033[1;32m"  : status_code < 400 ? "\033[1;33m" : "\033[1;31m";
     auto formatted_status_end = "\033[0m";
-    std::cout << response.GetHeader("date").value_or("") << " " << request.GetStartLine() <<  " " << formatted_status_start << status_code << formatted_status_end << " -\n"; 
+    std::cout << "[" << response.GetHeader("date").value_or("") << "] " << request.GetStartLine() <<  " " << formatted_status_start << status_code << formatted_status_end << " -\n"; 
 };
 void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&& response)
 {
     std::stringstream body_stream;
-
     auto method = request.GetMethod();
     auto target = request.GetTarget();
     //check method allowed
@@ -146,7 +134,6 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
         response.Send();
         return;
     }
-
     std::vector<unsigned char> target_file_contents((std::istreambuf_iterator<char>(target_file)), std::istreambuf_iterator<char>());
     response.SetStatusCode(200);
     response.SetHeader("content-type","text/html;charset=utf-8");
@@ -158,24 +145,112 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
 void HttpServer::HandleApplicationLayer()
 {
     std::cout << "Application Layer Started\n";
+    std::stringstream body_stream;
     while(1)
     {
         auto req_res = _request_queue.receive();
-
-        std::cout << "request recieved\n";
         auto request = std::move(req_res.first);
         auto response = std::move(req_res.second);
         
         std::stringstream body_stream;
-        body_stream << "<H1>Hello there</H1>" << request.ToString();
-        auto body_string = body_stream.str();
 
+        auto method = request.GetMethod();
+        auto target = request.GetTarget();
+        //check method allowed
+        ValidateMethod(method , request , response);
+        //check route map for requested resource
+        auto request_handler = _route_map.GetRouteHandler(method+target).value_or(nullptr);
+        if(request_handler){
+            request_handler(std::move(request) , std::move(response));
+            continue;
+        }
+        target = target == "/" ?  "/index.html" : target;
+        if(target == "/upload")
+        {
+            if(method == "POST")
+            {
+                HandleUpload(std::move(request) , std::move(response));
+                continue;
+            }
+            if(method == "GET")
+            {
+                HandleGetUploads(std::move(request) , std::move(response));
+                continue;
+            }
+        }
+        if( auto pos = target.find("/upload/")  != std::string::npos )
+        {
+            if(method == "GET")
+            {
+                auto filename = std::string(target.begin() + 8  , target.end());
+                auto file_location = (std::string)_config["upload_dir"] + "/" + filename;
+                if(!fs::exists(fs::path(file_location)))
+                {
+                    response.SetStatusCode(404);
+                    response.SetHeader("content-type","text/html;charset=utf-8");
+                    body_stream << "<body><div><H1>404 Not Found</H1>"  << filename << " not found.</div></body>";
+                    std::vector<unsigned char> body_vec((std::istreambuf_iterator<char>(body_stream)), std::istreambuf_iterator<char>());
+                    response.SetBody(body_vec);
+                    Log(request,response);
+                    response.Send();
+                    continue;
+                }
+                std::ifstream target_file(file_location, std::ios::binary);
+                if(!target_file.is_open())
+                {
+                    response.SetStatusCode(500);
+                    response.SetHeader("content-type","text/html;charset=utf-8");
+                    body_stream << "<body><H1>500 Internal Server Error</H1><div>.</div></body>";
+                    std::vector<unsigned char> body_vec((std::istreambuf_iterator<char>(body_stream)), std::istreambuf_iterator<char>());
+                    response.SetBody(body_vec);
+                    Log(request,response);
+                    response.Send();
+                    continue;
+                }
+                
+                target_file.unsetf(std::ios::skipws);
+                std::vector<unsigned char> target_file_contents((std::istream_iterator<char>(target_file)), std::istream_iterator<char>());
+                
+                response.SetStatusCode(200);
+                response.SetHeader("content-type","application/octet-stream");
+                response.SetHeader("Content-Disposition",R"(inline; filename=")" + filename  + R"(")");
+                response.SetBody(target_file_contents);
+                Log(request,response);
+                response.Send();
+                continue;
+            }
+        }
+        //fall back to web dir
+        auto target_location = (std::string)_config["web_dir"] + "/" + target;
+        if(!fs::exists(fs::path(target_location)))
+        {
+            response.SetStatusCode(404);
+            response.SetHeader("content-type","text/html;charset=utf-8");
+            body_stream << "<body><div><H1>404 Not Found</H1>"  << target << " not found.</div></body>";
+            std::vector<unsigned char> body_vec((std::istreambuf_iterator<char>(body_stream)), std::istreambuf_iterator<char>());
+            response.SetBody(body_vec);
+            Log(request,response);
+            response.Send();
+            continue;
+        }
+        std::ifstream target_file(target_location, std::ios::binary);
+        if(!target_file.is_open())
+        {
+            response.SetStatusCode(500);
+            response.SetHeader("content-type","text/html;charset=utf-8");
+            body_stream << "<body><H1>500 Internal Server Error</H1><div>.</div></body>";
+            std::vector<unsigned char> body_vec((std::istreambuf_iterator<char>(body_stream)), std::istreambuf_iterator<char>());
+            response.SetBody(body_vec);
+            Log(request,response);
+            response.Send();
+            continue;
+        }
+        std::vector<unsigned char> target_file_contents((std::istreambuf_iterator<char>(target_file)), std::istreambuf_iterator<char>());
         response.SetStatusCode(200);
         response.SetHeader("content-type","text/html;charset=utf-8");
-        response.SetBody(body_string);
+        response.SetBody(target_file_contents);
         Log(request,response);
         response.Send();
-        return;
     }
 };
 void HttpServer::HandleUpload(HttpRequest&& request, HttpResponse&& response)
