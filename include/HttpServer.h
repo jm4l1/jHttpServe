@@ -53,20 +53,33 @@ class HttpServer{
         void ParseConfigFile(std::string);
         void HandleApplicationLayer();
         void HandleApplicationLayerSync(HttpRequest&&, HttpResponse&&);
+        void HandleApplicationLayerHttp2Sync(HttpRequest&&, HttpResponse&&);
         void HandleUpload(HttpRequest&&, HttpResponse&&);
         void HandleGetUploads(HttpRequest&&, HttpResponse&&);
         void Log(const HttpRequest& , const HttpResponse&);
         std::function<void(std::vector<unsigned char> , std::promise<std::vector<unsigned char> >)> handle_parse_layer = [this](std::vector<unsigned char> message_buffer, std::promise<std::vector<unsigned char> > &&response_promise){
              HttpRequest request = HttpRequest(std::move(message_buffer));
              HttpResponse response = HttpResponse(std::move(response_promise));
+             if(!request.isValid){
                 response.SetHeader("server",(std::string)_config["server_name"]);
                 response.SetHeader("date" , GetDate());
                 response.SetHeader("connection","close");
-             if(!request.isValid){
                 response.SetStatusCode(400);
                 Log(request,response);
                 response.Send();
                 return;
+             }
+             if(request.GetHeader("Upgrade").has_value())
+             {
+                 auto upgrade_token = request.GetHeader("Upgrade").value();
+                 if(upgrade_token == "h2c")
+                 {
+                    if(request.GetHeader("HTTP2-Settings").has_value())
+                    {
+                        HandleApplicationLayerHttp2Sync(std::move(request),std::move(response));
+                        return;
+                    }
+                 }
              }
              auto req_res = std::make_pair(std::move(request),std::move(response));
             _request_queue.Send(std::move(req_res));

@@ -46,6 +46,13 @@ std::vector<unsigned char>  HttpMessage::ToBuffer() const{
 void HttpMessage::SetHeader(std::string header_name ,std::string header_value){
     _headers[header_name] = header_value;
 };
+void HttpMessage::AppendToBody(const std::vector<unsigned char>& buffer)
+{
+    _body.insert(_body.begin(),buffer.begin(),buffer.end());
+    auto body_length_char = _body.size();
+    auto body_length_bytes = body_length_char * sizeof(_body[0]);
+    SetHeader("content-length",std::to_string(body_length_bytes));
+}
 void HttpMessage::SetBody(const std::vector<unsigned char>& body){
     _body = body;
     auto body_length_char = _body.size();
@@ -100,6 +107,16 @@ HttpRequest::HttpRequest(std::vector<unsigned char> &&request_buffer){
         });
        std::getline(header_line_stream,header_name,':');
        std::getline(header_line_stream,header_value ,'\r');
+       auto start = header_value.find_first_not_of(" \t");
+       if(start != std::string::npos)
+       {
+        header_value = header_value.substr(start);
+       }
+       auto end = header_value.find_last_not_of(" \t");
+       if(end != std::string::npos)
+       {
+        header_value = header_value.substr(0 , end + 1);
+       }
        SetHeader(header_name,header_value);
        request_buffer.erase(request_buffer.begin(),line_end + 2);
        auto next_char = request_buffer[0];

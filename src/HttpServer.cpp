@@ -45,6 +45,10 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
     std::stringstream body_stream;
     auto method = request.GetMethod();
     auto target = request.GetTarget();
+    response.SetHeader("server",(std::string)_config["server_name"]);
+    response.SetHeader("date" , GetDate());
+    response.SetHeader("connection","close");
+
     //check method allowed
     ValidateMethod(method , request , response);
     //ch&eck route map for requested resource
@@ -142,6 +146,38 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
     response.Send();
     return;
 };
+void HttpServer::HandleApplicationLayerHttp2Sync(HttpRequest&& request, HttpResponse&& response)
+{
+    response.SetStatusCode(101);
+    response.SetHeader("Connection","Upgrade");
+    response.SetHeader("Upgrade","h2c");
+
+    auto settings_max_frame_size = Http2SettingsParam(SETTINGS_MAX_FRAME_SIZE,16384);
+    auto settings_enable_push = Http2SettingsParam(SETTINGS_ENABLE_PUSH,3);
+    auto settings_intial_window_size = Http2SettingsParam(SETTINGS_INITIAL_WINDOW_SIZE,1234);
+    auto settings_frame = Http2SettingsFrame();
+    settings_frame.AddParam(settings_max_frame_size);
+    settings_frame.AddParam(settings_enable_push);
+    settings_frame.AddParam(settings_intial_window_size);
+
+    auto frame = Http2Frame();
+    frame.type =HTTP2_SETTINGS_FRAME;
+    frame.length = settings_frame.Size();
+    frame.flags = 0x0;
+    frame.stream_id = 0x0;
+    frame.payload = settings_frame.Serialize();
+
+    // std::cout << CONNECTION_PREFACE[0] << "\n";
+    std::vector<unsigned char> connection_preface(CONNECTION_PREFACE ,  (CONNECTION_PREFACE) + strlen(CONNECTION_PREFACE) );
+    // response.SetBody(conneciton_preface);
+    // response.SetBody(frame.Serialize());
+    response.AppendToBody(frame.Serialize());
+    response.AppendToBody(connection_preface);
+    
+    Log(request,response);
+    response.Send();
+    return;
+};
 void HttpServer::HandleApplicationLayer()
 {
     std::cout << "Application Layer Started\n";
@@ -151,6 +187,10 @@ void HttpServer::HandleApplicationLayer()
         auto req_res = _request_queue.receive();
         auto request = std::move(req_res.first);
         auto response = std::move(req_res.second);
+
+        response.SetHeader("server",(std::string)_config["server_name"]);
+        response.SetHeader("date" , GetDate());
+        response.SetHeader("connection","close");
         
         std::stringstream body_stream;
 

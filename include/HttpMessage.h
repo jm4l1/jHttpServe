@@ -8,14 +8,17 @@
 #include <future>
 
 #include "jjson.hpp"
+#include "Http2.h"
 
 #define SP char(32)
 #define CR char(13)
 #define LF char(10)
 
+
 static std::vector<std::string> Methods({"GET" ,"HEAD" ,"POST" ,"PUT" ,"DELETE" ,"CONNECT" ,"OPTIONS" ,"TRACE"});
 
 static std::unordered_map<int,std::string> ResponseCodes = {
+    {101 ,"Switching Protocols"},
     {200 ,"OK"},
     {400 , "Bad Request"},
     {401 , "Unauthorized"},
@@ -30,6 +33,7 @@ static std::unordered_map<int,std::string> ResponseCodes = {
     {504 , "Gateway Timeout"},
     {505 , "HTTP Version Not Supported"}
 };
+
 class HttpMessage
 {
     public:
@@ -40,6 +44,7 @@ class HttpMessage
         void SetHeader(std::string,std::string);
         void SetBody(const jjson::value&);
         void SetBody(const std::vector<unsigned char>&);
+        void AppendToBody(const std::vector<unsigned char>& buffer);
         std::optional<std::string> GetHeader(std::string) const;
         std::vector<unsigned char> GetBody() const;
         void SetVersion(std::string);
