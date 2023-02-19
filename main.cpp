@@ -1,3 +1,4 @@
+#include "ArgsParser.h"
 #include "HttpMessage.h"
 #include "HttpServer.h"
 #include "RouteMap.h"
@@ -10,18 +11,15 @@
 #include <regex>
 #include <string_view>
 
-namespace fs = std::filesystem;
-
 void print_usage(std::string_view prog_name)
 {
 	std::cout << "Usage: " << prog_name << " [-f config_file] [-h] [-p port] [-t timeout]"
 			  << "\n";
 	std::cout << "\t-f config_file : location of configuration file in .json format\n";
 	std::cout << "\t-p port : Tcp port to accept server connections\n";
-	std::cout << "\t-t timeout : Time out of server to close connection \n";
+	std::cout << "\t-t timeoutt : Time out of server to close connection \n";
 	std::cout << "\t-h : show help menu\n";
 }
-
 std::unordered_map<std::string, std::string>
 	parse_argument(int argc, char* argv[], std::string_view allowed_flags, std::vector<std::string> required_flags)
 {
@@ -77,17 +75,23 @@ std::unordered_map<std::string, std::string>
 
 int main(int argc, char* argv[])
 {
-	auto argument_map = parse_argument(argc, argv, "hfpt", { "f" });
-	auto file_name = argument_map["f"];
+	ArgsParser parser(argv[0]);
+	parser.AddOption('f', "config_file", "location of configuration file in .json format", true);
+	parser.AddOption('p', "port", "Tcp port to accept server connections", false);
+	parser.AddOption('t', "timeout", "Time out of server to close connection", false);
+	parser.Parse(argc, argv);
+
+	auto argument_map = parser.GetArgs();
+	auto file_name = argument_map['f'];
 	auto port = 0;
-	if (argument_map.find("p") != argument_map.end())
+	if (argument_map.find('p') != argument_map.end())
 	{
-		port = std::stoi(argument_map["p"]);
+		port = std::stoi(argument_map['p']);
 	}
 	auto timeout = 0;
-	if (argument_map.find("t") != argument_map.end())
+	if (argument_map.find('t') != argument_map.end())
 	{
-		timeout = std::stoi(argument_map["t"]);
+		timeout = std::stoi(argument_map['t']);
 	}
 	auto server = HttpServer();
 	auto get_api = [](HttpRequest&& request, HttpResponse&& response)
