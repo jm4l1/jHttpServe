@@ -10,6 +10,8 @@
 #include <vector>
 
 
+#define assertm(exp, msg) assert(((void)msg, exp))
+
 namespace fs = std::filesystem;
 struct Option
 {
@@ -18,7 +20,12 @@ struct Option
 	std::string description;
 	bool is_required;
 };
-
+std::ostream& operator<<(std::ostream& os, const Option& obj)
+{
+	os << "-" << obj.flag << " " << obj.arg << ":"
+	   << " " << obj.description << "\n";
+	return os;
+}
 class ArgsParser
 {
 public:
@@ -29,8 +36,9 @@ public:
 
 	void Parse(int argc, char* argv[])
 	{
+		assertm(!_allowed_flags.empty(), "[ArgsParser] - Attempted to parse arguments when no options have been defined");
 		int count = 1;
-		while (count < (argc - 1))
+		while (count <= (argc - 1))
 		{
 			std::string arg = argv[count];
 			std::regex flag_regex("^-(.)");
@@ -46,18 +54,36 @@ public:
 				PrintUsage();
 				exit(EXIT_FAILURE);
 			}
-			if (flag_match.str(0)[1] == 'h')
+			auto flag = flag_match.str(0)[1];
+			if (flag == 'h')
 			{
 				PrintUsage();
 				exit(EXIT_SUCCESS);
 			}
-			if (count + 1 > argc)
+			if (count + 1 >= argc)
 			{
 				std::cout << "Error : Insufficient arguments provided!!\n\n";
 				PrintUsage();
 				exit(EXIT_FAILURE);
 			}
-			_argument_map.insert({ flag_match.str(0)[1], argv[count + 1] });
+			Option option = options[flag];
+			if (option.arg == "")
+			{
+				_argument_map.insert({ flag, "" });
+			}
+			else
+			{
+				try
+				{
+					_argument_map.insert({ flag, argv[count + 1] });
+				}
+				catch (...)
+				{
+					std::cout << "Error : flag " << arg << " requires " << option.arg << " argument\n\n";
+					PrintUsage();
+					exit(EXIT_FAILURE);
+				}
+			}
 			count += 2;
 		}
 		for (auto flag : _required_flags)
@@ -79,7 +105,7 @@ public:
 			_required_flags.emplace_back(flag);
 		}
 		Option option = { .flag = flag, .arg = flag_arg, .description = description, .is_required = is_required };
-		options.emplace_back(option);
+		options[flag] = option;
 	}
 
 	void PrintOptionsSummary()
@@ -92,8 +118,8 @@ public:
 					  [](auto& option)
 					  {
 						  std::cout << " [-";
-						  std::cout << option.flag << " ";
-						  std::cout << option.arg << "]";
+						  std::cout << option.first << " ";
+						  std::cout << option.second.arg << "]";
 					  });
 		std::cout << "\n";
 	}
@@ -104,7 +130,7 @@ public:
 					  options.end(),
 					  [](auto& option)
 					  {
-						  std::cout << '\t' << option;
+						  std::cout << '\t' << option.second;
 					  });
 		std::cout << "\n";
 	}
@@ -124,14 +150,9 @@ public:
 private:
 	std::string _prog_name;
 	std::unordered_map<char, std::string> _argument_map;
-	std::vector<char> _allowed_flags;
+	std::vector<char> _allowed_flags{ 'h' };
 	std::vector<char> _required_flags;
-	std::vector<Option> options;
+	std::unordered_map<char, Option> options;
 };
-std::ostream& operator<<(std::ostream& os, const Option& obj)
-{
-	os << "-" << obj.flag << " " << obj.arg << ":"
-	   << " " << obj.description << "\n";
-	return os;
-}
+
 #endif
