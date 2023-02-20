@@ -4,18 +4,21 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <utility>
 
 
 namespace fs = std::filesystem;
 
-void HttpServer::Get(std::string target, std::function<void(HttpRequest&&, HttpResponse&&)> get_handler)
+void HttpServer::Get(std::string target, std::function<HttpResponse(HttpRequest&&)> get_handler)
 {
 	_route_map.RegisterRoute("GET" + target, get_handler);
 }
-void HttpServer::Post(std::string target, std::function<void(HttpRequest&&, HttpResponse&&)> post_handler)
+
+void HttpServer::Post(std::string target, std::function<HttpResponse(HttpRequest&&)> post_handler)
 {
 	_route_map.RegisterRoute("POST" + target, post_handler);
 }
+
 void HttpServer::Init(std::string config_file_name)
 {
 	ParseConfigFile(config_file_name);
@@ -23,17 +26,89 @@ void HttpServer::Init(std::string config_file_name)
 	{
 		_config["upload_dir"] = "../uploads";
 	}
-	int port = (int)_config["port"];
-	_socket_server.SetPort(port);
-	_socket_server.SetTimeout((int)_config["timeout"]);
-	_socket_server.CreateSocket();
-	auto socket_thread = std::async(std::launch::async,
-									[this]()
-									{
-										_socket_server.Listen(handle_parse_layer);
-									});
-	auto app_logic_thread = std::async(std::launch::async, &HttpServer::HandleApplicationLayer, this);
+	int port = static_cast<int>(_config["port"]);
+	_server_socket.SetPort(port, PROTO::TCP);
+	_server_socket.CreateSocket();
+
+	_socket_thread = std::jthread(std::bind_front(&HttpServer::PerformSocketTask, this));
+	_app_logic_thread = std::jthread(std::bind_front(&HttpServer::HandleApplicationLayer, this));
+	// while (_is_server_running)
+	// {
+	// 	std::this_thread::sleep_for(std::chrono::seconds(1));
+	// }
 };
+
+void HttpServer::PerformSocketTask(std::stop_token stop_token)
+{
+	std::cout << "[HttpServer] - Starting socket receiver\n";
+	try
+	{
+		if (!_server_socket.Bind())
+		{
+			throw std::runtime_error("Unable to bind to port\n");
+		}
+		_server_socket.Listen();
+		while (!stop_token.stop_requested() && _is_server_running)
+		{
+			auto accept_result = _server_socket.Accept();
+			if (accept_result)
+			{
+				std::unique_ptr<jSocket> connection_socket = std::move(accept_result);
+				auto socket_read_result = connection_socket->Read();
+				auto read_error = std::get_if<ReadError>(&socket_read_result);
+				if (read_error)
+				{
+					switch (*read_error)
+					{
+					case ReadError::ConnectionClosed:
+						std::cout << "[HttpServer] - Socket closed by peer\n";
+						break;
+
+					case ReadError::TimeOut:
+						break;
+
+					default:
+						std::cout << "[HttpServer] - Error reading\n";
+						break;
+					}
+					continue;
+				}
+				auto buffer = *(std::get_if<std::vector<unsigned char>>(&socket_read_result));
+				if (!buffer.empty())
+				{
+					ParseData(std::move(buffer), std::move(connection_socket));
+				}
+			}
+		}
+	}
+	catch (const std::exception& e)
+	{
+		std::cout << "[HTTPServer] - error " << e.what();
+	}
+	_is_server_running = false;
+	std::cout << "[HttpServer] - Ending socket receiver\n";
+}
+
+void HttpServer::ParseData(std::vector<unsigned char>&& message_buffer, std::unique_ptr<jSocket> socket)
+{
+	HttpRequest request = HttpRequest(std::move(message_buffer));
+	if (!request.isValid)
+	{
+		std::cout << "[HttpServer] - Unable to parse data as http request\n";
+		HttpResponse response = HttpResponse();
+		response.SetHeader("server", (std::string)_config["server_name"]);
+		response.SetHeader("date", GetDate());
+		response.SetHeader("connection", request.GetHeader("Connection").value_or("close"));
+		response.SetStatusCode(400);
+		Log(request, response);
+		socket->Write(response.ToBuffer());
+		return;
+	}
+	auto req_res = std::make_pair(std::move(request), std::move(socket));
+	_request_queue.Send(std::move(req_res));
+	return;
+}
+
 void HttpServer::Log(const HttpRequest& request, const HttpResponse& response)
 {
 	std::lock_guard<std::mutex> lock(_logger_mutex);
@@ -46,36 +121,77 @@ void HttpServer::Log(const HttpRequest& request, const HttpResponse& response)
 	std::cout << "[" << response.GetHeader("date").value_or("") << "] " << request.GetStartLine() << " " << formatted_status_start
 			  << status_code << formatted_status_end << " -\n";
 };
-void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&& response)
+
+void HttpServer::HandleApplicationLayer(std::stop_token stop_token)
 {
+	std::cout << "[HttpServer] - Application Layer Started\n";
+	std::stringstream body_stream;
+	while (stop_token.stop_requested())
+	{
+		auto [request, socket] = _request_queue.receive();
+
+		HttpConnection connection(std::move(socket));
+		connection.SetDataHandler(
+			[this](const std::vector<unsigned char>& data_buffer) -> std::optional<HttpResponse>
+			{
+				{
+					HttpRequest http_request(data_buffer);
+					if (http_request.isValid)
+					{
+						return HandleHttpRequest(std::move(http_request));
+					}
+				}
+				std::cout << "[HttpServer] - Unknown data received\n";
+				return std::nullopt;
+			});
+		connection.HandleData(request.ToBuffer());
+		_connections.emplace_back(std::move(connection));
+	}
+	std::cout << "Application Layer Ending\n";
+	_is_server_running = false;
+};
+
+HttpResponse HttpServer::HandleHttpRequest(HttpRequest&& request)
+{
+	HttpResponse response = HttpResponse();
+	response.SetHeader("server", (std::string)_config["server_name"]);
+	response.SetHeader("date", GetDate());
+	response.SetHeader("connection", request.GetHeader("Connection").value_or("close"));
 	std::stringstream body_stream;
 	auto method = request.GetMethod();
 	auto target = request.GetTarget();
-	response.SetHeader("server", (std::string)_config["server_name"]);
-	response.SetHeader("date", GetDate());
-	response.SetHeader("connection", "close");
 
 	// check method allowed
-	ValidateMethod(method, request, response);
-	// ch&eck route map for requested resource
+	if (!ValidateMethod(method))
+	{
+		std::cout << "[HttpServer] - Http Validation failed for method " << method << "\n";
+		response.SetStatusCode(405);
+		response.SetHeader("connection", "close");
+		std::stringstream allowed_stream;
+		std::ostream_iterator<std::string> outputString(allowed_stream, ",");
+		std::copy(_allowed_methods.begin(), _allowed_methods.end(), outputString);
+		response.SetHeader("allow", allowed_stream.str());
+		body_stream << "<body><div><H1>405 Method Not Allowed</H1>" << allowed_stream.str() << "</div></body>";
+		response.SetBody(body_stream.str());
+		Log(request, response);
+		return response;
+	}
+	// check route map for requested resource
 	auto request_handler = _route_map.GetRouteHandler(method + target).value_or(nullptr);
 	if (request_handler)
 	{
-		request_handler(std::move(request), std::move(response));
-		return;
+		return request_handler(std::move(request));
 	}
 	target = target == "/" ? "/index.html" : target;
 	if (target == "/upload")
 	{
 		if (method == "POST")
 		{
-			HandleUpload(std::move(request), std::move(response));
-			return;
+			return HandleUpload(std::move(request));
 		}
 		if (method == "GET")
 		{
-			HandleGetUploads(std::move(request), std::move(response));
-			return;
+			return HandleGetUploads(std::move(request));
 		}
 	}
 	if (auto pos = target.find("/upload/") != std::string::npos)
@@ -92,8 +208,7 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
 				std::vector<unsigned char> body_vec((std::istreambuf_iterator<char>(body_stream)), std::istreambuf_iterator<char>());
 				response.SetBody(body_vec);
 				Log(request, response);
-				response.Send();
-				return;
+				return response;
 			}
 			std::ifstream target_file(file_location, std::ios::binary);
 			if (!target_file.is_open())
@@ -104,8 +219,7 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
 				std::vector<unsigned char> body_vec((std::istreambuf_iterator<char>(body_stream)), std::istreambuf_iterator<char>());
 				response.SetBody(body_vec);
 				Log(request, response);
-				response.Send();
-				return;
+				return response;
 			}
 
 			target_file.unsetf(std::ios::skipws);
@@ -116,9 +230,16 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
 			response.SetHeader("Content-Disposition", R"(inline; filename=")" + filename + R"(")");
 			response.SetBody(target_file_contents);
 			Log(request, response);
-			response.Send();
-			return;
+			return response;
 		}
+
+		response.SetStatusCode(405);
+		response.SetHeader("allow", "GET");
+		body_stream << "<body><div><H1>405 Method Not Allowed</H1><p>The request method " << method << " is not appropriate for the target "
+					<< target << ".</p></div></body>";
+		response.SetBody(body_stream.str());
+		Log(request, response);
+		return response;
 	}
 	// fall back to web dir
 	auto target_location = (std::string)_config["web_dir"] + "/" + target;
@@ -130,8 +251,7 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
 		std::vector<unsigned char> body_vec((std::istreambuf_iterator<char>(body_stream)), std::istreambuf_iterator<char>());
 		response.SetBody(body_vec);
 		Log(request, response);
-		response.Send();
-		return;
+		return response;
 	}
 	std::ifstream target_file(target_location, std::ios::binary);
 	if (!target_file.is_open())
@@ -142,166 +262,22 @@ void HttpServer::HandleApplicationLayerSync(HttpRequest&& request, HttpResponse&
 		std::vector<unsigned char> body_vec((std::istreambuf_iterator<char>(body_stream)), std::istreambuf_iterator<char>());
 		response.SetBody(body_vec);
 		Log(request, response);
-		response.Send();
-		return;
+		return response;
 	}
 	std::vector<unsigned char> target_file_contents((std::istreambuf_iterator<char>(target_file)), std::istreambuf_iterator<char>());
 	response.SetStatusCode(200);
 	response.SetHeader("content-type", "text/html;charset=utf-8");
 	response.SetBody(target_file_contents);
 	Log(request, response);
-	response.Send();
-	return;
+	return response;
 };
-void HttpServer::HandleApplicationLayerHttp2Sync(HttpRequest&& request, HttpResponse&& response)
+
+HttpResponse HttpServer::HandleUpload(HttpRequest&& request)
 {
-	response.SetStatusCode(101);
-	response.SetHeader("Connection", "Upgrade");
-	response.SetHeader("Upgrade", "h2c");
-
-	auto settings_max_frame_size = Http2SettingsParam(SETTINGS_MAX_FRAME_SIZE, 16384);
-	auto settings_enable_push = Http2SettingsParam(SETTINGS_ENABLE_PUSH, 3);
-	auto settings_intial_window_size = Http2SettingsParam(SETTINGS_INITIAL_WINDOW_SIZE, 1234);
-	auto settings_frame = Http2SettingsFrame();
-	settings_frame.AddParam(settings_max_frame_size);
-	settings_frame.AddParam(settings_enable_push);
-	settings_frame.AddParam(settings_intial_window_size);
-
-	auto frame = Http2Frame();
-	frame.type = HTTP2_SETTINGS_FRAME;
-	frame.length = settings_frame.Size();
-	frame.flags = 0x0;
-	frame.stream_id = 0x0;
-	frame.payload = settings_frame.Serialize();
-
-	// std::cout << CONNECTION_PREFACE[0] << "\n";
-	std::vector<unsigned char> connection_preface(CONNECTION_PREFACE, (CONNECTION_PREFACE) + strlen(CONNECTION_PREFACE));
-	// response.SetBody(conneciton_preface);
-	// response.SetBody(frame.Serialize());
-	response.AppendToBody(frame.Serialize());
-	response.AppendToBody(connection_preface);
-
-	Log(request, response);
-	response.Send();
-	return;
-};
-void HttpServer::HandleApplicationLayer()
-{
-	std::cout << "Application Layer Started\n";
-	std::stringstream body_stream;
-	while (1)
-	{
-		auto req_res = _request_queue.receive();
-		auto request = std::move(req_res.first);
-		auto response = std::move(req_res.second);
-
-		response.SetHeader("server", (std::string)_config["server_name"]);
-		response.SetHeader("date", GetDate());
-		response.SetHeader("connection", "close");
-
-		std::stringstream body_stream;
-		auto method = request.GetMethod();
-		auto target = request.GetTarget();
-		// check method allowed
-		ValidateMethod(method, request, response);
-		// check route map for requested resource
-		auto request_handler = _route_map.GetRouteHandler(method + target).value_or(nullptr);
-		if (request_handler)
-		{
-			request_handler(std::move(request), std::move(response));
-			continue;
-		}
-		target = target == "/" ? "/index.html" : target;
-		if (target == "/upload")
-		{
-			if (method == "POST")
-			{
-				HandleUpload(std::move(request), std::move(response));
-				continue;
-			}
-			if (method == "GET")
-			{
-				HandleGetUploads(std::move(request), std::move(response));
-				continue;
-			}
-		}
-		if (auto pos = target.find("/upload/") != std::string::npos)
-		{
-			if (method == "GET")
-			{
-				auto filename = std::string(target.begin() + 8, target.end());
-				auto file_location = (std::string)_config["upload_dir"] + "/" + filename;
-				if (!fs::exists(fs::path(file_location)))
-				{
-					response.SetStatusCode(404);
-					response.SetHeader("content-type", "text/html;charset=utf-8");
-					body_stream << "<body><div><H1>404 Not Found</H1>" << filename << " not found.</div></body>";
-					std::vector<unsigned char> body_vec((std::istreambuf_iterator<char>(body_stream)), std::istreambuf_iterator<char>());
-					response.SetBody(body_vec);
-					Log(request, response);
-					response.Send();
-					continue;
-				}
-				std::ifstream target_file(file_location, std::ios::binary);
-				if (!target_file.is_open())
-				{
-					response.SetStatusCode(500);
-					response.SetHeader("content-type", "text/html;charset=utf-8");
-					body_stream << "<body><H1>500 Internal Server Error</H1><div>.</div></body>";
-					std::vector<unsigned char> body_vec((std::istreambuf_iterator<char>(body_stream)), std::istreambuf_iterator<char>());
-					response.SetBody(body_vec);
-					Log(request, response);
-					response.Send();
-					continue;
-				}
-
-				target_file.unsetf(std::ios::skipws);
-				std::vector<unsigned char> target_file_contents((std::istream_iterator<char>(target_file)), std::istream_iterator<char>());
-
-				response.SetStatusCode(200);
-				response.SetHeader("content-type", "application/octet-stream");
-				response.SetHeader("Content-Disposition", R"(inline; filename=")" + filename + R"(")");
-				response.SetBody(target_file_contents);
-				Log(request, response);
-				response.Send();
-				continue;
-			}
-		}
-		// fall back to web dir
-		auto target_location = (std::string)_config["web_dir"] + "/" + target;
-		if (!fs::exists(fs::path(target_location)))
-		{
-			response.SetStatusCode(404);
-			response.SetHeader("content-type", "text/html;charset=utf-8");
-			body_stream << "<body><div><H1>404 Not Found</H1>" << target << " not found.</div></body>";
-			std::vector<unsigned char> body_vec((std::istreambuf_iterator<char>(body_stream)), std::istreambuf_iterator<char>());
-			response.SetBody(body_vec);
-			Log(request, response);
-			response.Send();
-			continue;
-		}
-		std::ifstream target_file(target_location, std::ios::binary);
-		if (!target_file.is_open())
-		{
-			response.SetStatusCode(500);
-			response.SetHeader("content-type", "text/html;charset=utf-8");
-			body_stream << "<body><H1>500 Internal Server Error</H1><div>.</div></body>";
-			std::vector<unsigned char> body_vec((std::istreambuf_iterator<char>(body_stream)), std::istreambuf_iterator<char>());
-			response.SetBody(body_vec);
-			Log(request, response);
-			response.Send();
-			continue;
-		}
-		std::vector<unsigned char> target_file_contents((std::istreambuf_iterator<char>(target_file)), std::istreambuf_iterator<char>());
-		response.SetStatusCode(200);
-		response.SetHeader("content-type", "text/html;charset=utf-8");
-		response.SetBody(target_file_contents);
-		Log(request, response);
-		response.Send();
-	}
-};
-void HttpServer::HandleUpload(HttpRequest&& request, HttpResponse&& response)
-{
+	HttpResponse response;
+	response.SetHeader("connection", request.GetHeader("Connection").value_or("close"));
+	response.SetHeader("server", (std::string)_config["server_name"]);
+	response.SetHeader("date", GetDate());
 	auto accepted_content_type = std::vector<std::string>{ "multipart/form-data", "text/plain" };
 	auto content_type = request.GetHeader("Content-Type").value_or("");
 	bool acceptable_type = false;
@@ -325,8 +301,7 @@ void HttpServer::HandleUpload(HttpRequest&& request, HttpResponse&& response)
 		response.SetStatusCode(415);
 		response.SetHeader("accept", "multipart/form-data , text/plain");
 		Log(request, response);
-		response.Send();
-		return;
+		return response;
 	}
 	if (!fs::exists(fs::path(_config["upload_dir"])))
 	{
@@ -340,8 +315,7 @@ void HttpServer::HandleUpload(HttpRequest&& request, HttpResponse&& response)
 		{
 			response.SetStatusCode(500);
 			Log(request, response);
-			response.Send();
-			return;
+			return response;
 		}
 		try
 		{
@@ -352,8 +326,7 @@ void HttpServer::HandleUpload(HttpRequest&& request, HttpResponse&& response)
 		{
 			response.SetStatusCode(500);
 			Log(request, response);
-			response.Send();
-			return;
+			return response;
 		}
 	}
 	else if (content_type.find("multipart/form-data") != std::string::npos)
@@ -363,8 +336,7 @@ void HttpServer::HandleUpload(HttpRequest&& request, HttpResponse&& response)
 		{
 			response.SetStatusCode(400);
 			Log(request, response);
-			response.Send();
-			return;
+			return response;
 		}
 		auto boundary_param = std::string(content_type.begin() + boundary_start, content_type.end());
 		boundary_start = boundary_param.find("=");
@@ -372,8 +344,7 @@ void HttpServer::HandleUpload(HttpRequest&& request, HttpResponse&& response)
 		{
 			response.SetStatusCode(400);
 			Log(request, response);
-			response.Send();
-			return;
+			return response;
 		}
 		auto boundary_value = std::string(boundary_param.begin() + boundary_start + 1, boundary_param.end());
 		auto body_buffer = request.GetBody();
@@ -386,8 +357,7 @@ void HttpServer::HandleUpload(HttpRequest&& request, HttpResponse&& response)
 		{
 			response.SetStatusCode(500);
 			Log(request, response);
-			response.Send();
-			return;
+			return response;
 		}
 		auto headers_string = std::string((char*)body_buffer.data(), ((char*)body_buffer.data()) + headers_end);
 		body_buffer.erase(body_buffer.begin(), body_buffer.begin() + headers_end + 4);
@@ -415,8 +385,7 @@ void HttpServer::HandleUpload(HttpRequest&& request, HttpResponse&& response)
 		{
 			response.SetStatusCode(500);
 			Log(request, response);
-			response.Send();
-			return;
+			return response;
 		}
 		try
 		{
@@ -426,8 +395,7 @@ void HttpServer::HandleUpload(HttpRequest&& request, HttpResponse&& response)
 		{
 			response.SetStatusCode(500);
 			Log(request, response);
-			response.Send();
-			return;
+			return response;
 		}
 	}
 	response.SetHeader("content-type", "application/json");
@@ -437,11 +405,12 @@ void HttpServer::HandleUpload(HttpRequest&& request, HttpResponse&& response)
 	response.SetBody(api_object);
 	response.SetStatusCode(200);
 	Log(request, response);
-	response.Send();
-	return;
+	return response;
 }
-void HttpServer::HandleGetUploads(HttpRequest&& request, HttpResponse&& response)
+
+HttpResponse HttpServer::HandleGetUploads(HttpRequest&& request)
 {
+	HttpResponse response;
 	std::stringstream body_stream;
 	auto upload_dir = (std::string)_config["upload_dir"];
 	if (!fs::exists(fs::path(upload_dir)))
@@ -451,8 +420,7 @@ void HttpServer::HandleGetUploads(HttpRequest&& request, HttpResponse&& response
 		std::vector<unsigned char> body_vec((std::istreambuf_iterator<char>(body_stream)), std::istreambuf_iterator<char>());
 		response.SetBody(body_vec);
 		Log(request, response);
-		response.Send();
-		return;
+		return response;
 	}
 	body_stream << "<!DOCTYPE html><htm><body><H1>List of Uploads</H1><div><ul>";
 	for (auto& p : fs::directory_iterator(upload_dir))
@@ -468,12 +436,14 @@ void HttpServer::HandleGetUploads(HttpRequest&& request, HttpResponse&& response
 	}
 	body_stream << "</ul></div></body></html>";
 	response.SetHeader("content-type", "text/html;charset=utf-8");
+	response.SetHeader("server", (std::string)_config["server_name"]);
+	response.SetHeader("date", GetDate());
+	response.SetHeader("connection", request.GetHeader("Connection").value_or("close"));
 	std::vector<unsigned char> body_vec((std::istreambuf_iterator<char>(body_stream)), std::istreambuf_iterator<char>());
 	response.SetBody(body_vec);
 	response.SetStatusCode(200);
 	Log(request, response);
-	response.Send();
-	return;
+	return response;
 }
 
 void HttpServer::ParseConfigFile(std::string file_name)
