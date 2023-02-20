@@ -1,79 +1,43 @@
 #ifndef _HTTPSERVER_H_
 #define _HTTPSERVER_H_
 
+#include "HttpConnection.h"
 #include "HttpMessage.h"
 #include "MessageQueue.h"
 #include "RouteMap.h"
 #include "SocketServer.h"
+#include "jSocket.h"
 #include "jjson.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <deque>
 #include <iomanip>
 #include <iterator>
 #include <mutex>
+#include <stop_token>
 #include <string>
-
+#include <thread>
 class HttpServer
 {
 public:
 	HttpServer(){};
 	~HttpServer(){};
 	void Init(std::string);
-	void Get(std::string, std::function<void(HttpRequest&&, HttpResponse&&)>);
-	void Post(std::string, std::function<void(HttpRequest&&, HttpResponse&&)>);
+	void Get(std::string, std::function<HttpResponse(HttpRequest&&)>);
+	void Post(std::string, std::function<HttpResponse(HttpRequest&&)>);
 
 private:
-	jjson::value _config;
-	MessageQueue<std::pair<HttpRequest, HttpResponse>> _request_queue;
-	SocketServer _socket_server;
-	RouteMap _route_map;
-	std::mutex _logger_mutex;
-	std::vector<std::string> _allowed_methods;
 	void ParseConfigFile(std::string);
-	void HandleApplicationLayer();
-	void HandleApplicationLayerSync(HttpRequest&&, HttpResponse&&);
-	void HandleUpload(HttpRequest&&, HttpResponse&&);
-	void HandleGetUploads(HttpRequest&&, HttpResponse&&);
+	void HandleApplicationLayer(std::stop_token stop_token);
+	HttpResponse HandleUpload(HttpRequest&&);
+	HttpResponse HandleGetUploads(HttpRequest&&);
 	void Log(const HttpRequest&, const HttpResponse&);
-	std::function<void(std::vector<unsigned char>, std::promise<std::vector<unsigned char>>)> handle_parse_layer =
-		[this](std::vector<unsigned char> message_buffer, std::promise<std::vector<unsigned char>>&& response_promise)
-	{
-		HttpRequest request = HttpRequest(std::move(message_buffer));
-		HttpResponse response = HttpResponse(std::move(response_promise));
-		response.SetHeader("server", (std::string)_config["server_name"]);
-		response.SetHeader("date", GetDate());
-		response.SetHeader("connection", "close");
-		if (!request.isValid)
-		{
-			response.SetStatusCode(400);
-			Log(request, response);
-			response.Send();
-			return;
-		}
-		auto req_res = std::make_pair(std::move(request), std::move(response));
-		_request_queue.Send(std::move(req_res));
-		return;
-		// HandleApplicationLayerSync(std::move(request),std::move(response));
-	};
-
-	void ValidateMethod(std::string method, const HttpRequest& request, HttpResponse& response)
+	bool ValidateMethod(std::string method)
 	{
 		std::stringstream body_stream;
 		auto method_itr = std::find(_allowed_methods.begin(), _allowed_methods.end(), method);
-		if (method_itr == _allowed_methods.end())
-		{
-			response.SetStatusCode(405);
-			std::stringstream allowed_stream;
-			std::ostream_iterator<std::string> outputString(allowed_stream, ",");
-			std::copy(_allowed_methods.begin(), _allowed_methods.end(), outputString);
-			response.SetHeader("allow", allowed_stream.str());
-			body_stream << "<body><div><H1>405 Method Not Allowed</H1>" << allowed_stream.str() << "</div></body>";
-			response.SetBody(body_stream.str());
-			Log(request, response);
-			response.Send();
-			return;
-		}
+		return method_itr != _allowed_methods.end();
 	}
 	static std::string GetDate()
 	{
@@ -91,6 +55,22 @@ private:
 		date_stream << std::put_time(std::localtime(&date), "%Y%m%d_%OH:%M:%S");
 		return date_stream.str();
 	};
+	void PerformSocketTask(std::stop_token stop_token);
+	void ParseData(std::vector<unsigned char>&& message_buffer, std::unique_ptr<jSocket> socket);
+	HttpResponse HandleHttpRequest(HttpRequest&& request);
+
+private:
+	jjson::value _config;
+	MessageQueue<std::pair<HttpRequest, std::unique_ptr<jSocket>>> _request_queue;
+	SocketServer _socket_server;
+	jSocket _server_socket;
+	RouteMap _route_map;
+	std::mutex _logger_mutex;
+	std::vector<std::string> _allowed_methods;
+	std::jthread _socket_thread;
+	std::jthread _app_logic_thread;
+	std::vector<HttpConnection> _connections;
+	std::atomic<bool> _is_server_running = true;
 };
 
 #endif

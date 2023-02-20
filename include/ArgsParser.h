@@ -2,6 +2,7 @@
 #define __ARGS_PARSER_H_
 
 #include <algorithm>
+#include <cassert>
 #include <filesystem>
 #include <iostream>
 #include <regex>
