@@ -17,7 +17,6 @@ public:
 	HttpConnection(std::unique_ptr<jSocket> socket);
 	HttpConnection(HttpConnection&& other);
 	HttpConnection(HttpConnection& other) = delete;
-	std::chrono::steady_clock::time_point LastReceivedTime() const;
 	void Close();
 	void SetDataHandler(const std::function<std::optional<HttpResponse>(const std::vector<unsigned char>&)>& data_handler);
 	void HandleData(const std::vector<unsigned char>& data_buffer);
@@ -25,6 +24,7 @@ public:
 	{
 		return _can_close;
 	};
+	std::chrono::steady_clock::time_point LastUsedTime();
 
 private:
 	void Start();
@@ -34,7 +34,8 @@ private:
 
 private:
 	std::unique_ptr<jSocket> _socket;
-	std::chrono::steady_clock::time_point _last_received_time;
+	std::chrono::steady_clock::time_point _last_used_time;
+	std::mutex _last_used_mutex;
 	std::jthread _connection_thread;
 	std::function<std::optional<HttpResponse>(const std::vector<unsigned char>)> _data_handler = nullptr;
 	std::atomic<bool> _can_close = false;

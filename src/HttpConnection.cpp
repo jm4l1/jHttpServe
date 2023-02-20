@@ -16,10 +16,6 @@ HttpConnection::HttpConnection(HttpConnection&& other)
 	Start();
 }
 
-std::chrono::steady_clock::time_point HttpConnection::LastReceivedTime() const
-{
-	return _last_received_time;
-}
 void HttpConnection::Close()
 {
 	_connection_thread.request_stop();
@@ -64,6 +60,13 @@ void HttpConnection::HandleData(const std::vector<unsigned char>& data_buffer)
 		auto response = _data_handler(data_buffer);
 		if (response.has_value())
 		{
+			if (response.value().GetHeader("connection").value_or("") == "Close" ||
+				response.value().GetHeader("connection").value_or("") == "close" ||
+				response.value().GetHeader("Connection").value_or("") == "Close" ||
+				response.value().GetHeader("Connection").value_or("") == "close")
+			{
+				_can_close = true;
+			}
 			Send(response.value().ToBuffer());
 		}
 	}
@@ -72,6 +75,8 @@ void HttpConnection::HandleData(const std::vector<unsigned char>& data_buffer)
 void HttpConnection::Send(const std::vector<unsigned char>& data_buffer)
 {
 	_socket->Write(data_buffer);
+	std::unique_lock lock(_last_used_mutex);
+	_last_used_time = std::chrono::steady_clock::now();
 }
 
 void HttpConnection::Worker(std::stop_token stop_token)
@@ -84,6 +89,8 @@ void HttpConnection::Worker(std::stop_token stop_token)
 			if (read_buffer.has_value())
 			{
 				HandleData(read_buffer.value());
+				std::unique_lock lock(_last_used_mutex);
+				_last_used_time = std::chrono::steady_clock::now();
 			}
 		}
 	}
@@ -91,4 +98,10 @@ void HttpConnection::Worker(std::stop_token stop_token)
 	{
 		std::cout << "[Http Connection] - caught an exception (" << e.what() << ")\n";
 	}
+}
+
+std::chrono::steady_clock::time_point HttpConnection::LastUsedTime()
+{
+	std::unique_lock lock(_last_used_mutex);
+	return _last_used_time;
 }
