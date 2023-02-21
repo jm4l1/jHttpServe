@@ -8,6 +8,18 @@ HttpConnection::HttpConnection(std::unique_ptr<jSocket> socket)
 {
 	Start();
 }
+
+HttpConnection::~HttpConnection()
+{
+	if (_connection_thread.joinable())
+	{
+		_connection_thread.request_stop();
+	}
+	if (_socket)
+	{
+		_socket->Close();
+	}
+}
 HttpConnection::HttpConnection(HttpConnection&& other)
 {
 	this->_socket = std::move(other._socket);
@@ -16,10 +28,6 @@ HttpConnection::HttpConnection(HttpConnection&& other)
 	Start();
 }
 
-std::chrono::steady_clock::time_point HttpConnection::LastReceivedTime() const
-{
-	return _last_received_time;
-}
 void HttpConnection::Close()
 {
 	_connection_thread.request_stop();
@@ -64,6 +72,14 @@ void HttpConnection::HandleData(const std::vector<unsigned char>& data_buffer)
 		auto response = _data_handler(data_buffer);
 		if (response.has_value())
 		{
+			auto connectionHeaderLower = response.value().GetHeader("connection").value_or("");
+			auto connectionHeaderUpper = response.value().GetHeader("Connection").value_or("");
+
+			if (connectionHeaderLower == "Close" || connectionHeaderLower == "close" || connectionHeaderUpper == "Close" ||
+				connectionHeaderUpper == "close")
+			{
+				_can_close = true;
+			}
 			Send(response.value().ToBuffer());
 		}
 	}
@@ -72,6 +88,8 @@ void HttpConnection::HandleData(const std::vector<unsigned char>& data_buffer)
 void HttpConnection::Send(const std::vector<unsigned char>& data_buffer)
 {
 	_socket->Write(data_buffer);
+	std::unique_lock lock(_last_used_mutex);
+	_last_used_time = std::chrono::steady_clock::now();
 }
 
 void HttpConnection::Worker(std::stop_token stop_token)
@@ -84,6 +102,8 @@ void HttpConnection::Worker(std::stop_token stop_token)
 			if (read_buffer.has_value())
 			{
 				HandleData(read_buffer.value());
+				std::unique_lock lock(_last_used_mutex);
+				_last_used_time = std::chrono::steady_clock::now();
 			}
 		}
 	}
@@ -91,4 +111,10 @@ void HttpConnection::Worker(std::stop_token stop_token)
 	{
 		std::cout << "[Http Connection] - caught an exception (" << e.what() << ")\n";
 	}
+}
+
+std::chrono::steady_clock::time_point HttpConnection::LastUsedTime()
+{
+	std::unique_lock lock(_last_used_mutex);
+	return _last_used_time;
 }

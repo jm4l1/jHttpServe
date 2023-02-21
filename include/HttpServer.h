@@ -13,10 +13,13 @@
 #include <chrono>
 #include <iomanip>
 #include <iterator>
+#include <memory>
 #include <mutex>
 #include <stop_token>
 #include <string>
 #include <thread>
+
+constexpr std::chrono::seconds CONNECTION_TIMEOUT(5);
 class HttpServer
 {
 public:
@@ -62,15 +65,15 @@ private:
 private:
 	jjson::value _config;
 	MessageQueue<std::pair<HttpRequest, std::unique_ptr<jSocket>>> _request_queue;
-	SocketServer _socket_server;
 	jSocket _server_socket;
 	RouteMap _route_map;
 	std::mutex _logger_mutex;
 	std::vector<std::string> _allowed_methods;
 	std::jthread _socket_thread;
 	std::jthread _app_logic_thread;
-	std::vector<HttpConnection> _connections;
+	std::vector<std::unique_ptr<HttpConnection>> _connections = {};
 	std::atomic<bool> _is_server_running = true;
+	std::condition_variable _application_state_cond_var;
 };
 
 #endif
