@@ -8,6 +8,18 @@ HttpConnection::HttpConnection(std::unique_ptr<jSocket> socket)
 {
 	Start();
 }
+
+HttpConnection::~HttpConnection()
+{
+	if (_connection_thread.joinable())
+	{
+		_connection_thread.request_stop();
+	}
+	if (_socket)
+	{
+		_socket->Close();
+	}
+}
 HttpConnection::HttpConnection(HttpConnection&& other)
 {
 	this->_socket = std::move(other._socket);
@@ -60,10 +72,11 @@ void HttpConnection::HandleData(const std::vector<unsigned char>& data_buffer)
 		auto response = _data_handler(data_buffer);
 		if (response.has_value())
 		{
-			if (response.value().GetHeader("connection").value_or("") == "Close" ||
-				response.value().GetHeader("connection").value_or("") == "close" ||
-				response.value().GetHeader("Connection").value_or("") == "Close" ||
-				response.value().GetHeader("Connection").value_or("") == "close")
+			auto connectionHeaderLower = response.value().GetHeader("connection").value_or("");
+			auto connectionHeaderUpper = response.value().GetHeader("Connection").value_or("");
+
+			if (connectionHeaderLower == "Close" || connectionHeaderLower == "close" || connectionHeaderUpper == "Close" ||
+				connectionHeaderUpper == "close")
 			{
 				_can_close = true;
 			}

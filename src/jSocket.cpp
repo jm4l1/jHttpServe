@@ -103,7 +103,7 @@ std::unique_ptr<jSocket> jSocket::Accept(std::chrono::milliseconds time_out)
 	return accepted_socket;
 }
 
-ReadResult jSocket::Read(std::chrono::milliseconds read_timeout)
+ReadResult jSocket::Read()
 {
 	unsigned char read_buffer[1024] = { 0 };
 	std::vector<unsigned char> data_buffer;
@@ -122,12 +122,6 @@ ReadResult jSocket::Read(std::chrono::milliseconds read_timeout)
 		return ReadError::UnknownError;
 	}
 	data_buffer.insert(data_buffer.end(), read_buffer, read_buffer + bytes_read);
-	{
-		if (std::chrono::steady_clock::now() - read_start > read_timeout)
-		{
-			return ReadError::TimeOut;
-		}
-	}
 
 	return data_buffer;
 }
@@ -135,4 +129,9 @@ ReadResult jSocket::Read(std::chrono::milliseconds read_timeout)
 void jSocket::Write(const std::vector<unsigned char>& data_buffer)
 {
 	auto bytes_written = write(_socket_fd, data_buffer.data(), static_cast<int>(data_buffer.size()));
+}
+
+void jSocket::Close()
+{
+	close(_socket_fd);
 }

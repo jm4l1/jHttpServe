@@ -75,7 +75,7 @@ std::optional<std::string> HttpMessage::GetHeader(std::string header_name) const
 	auto kv_pair = _headers.find(header_name);
 	if (kv_pair == _headers.end())
 	{
-		return {};
+		return std::nullopt;
 	}
 	return kv_pair->second;
 };

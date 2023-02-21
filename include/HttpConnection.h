@@ -15,6 +15,7 @@ class HttpConnection
 {
 public:
 	HttpConnection(std::unique_ptr<jSocket> socket);
+	~HttpConnection();
 	HttpConnection(HttpConnection&& other);
 	HttpConnection(HttpConnection& other) = delete;
 	void Close();

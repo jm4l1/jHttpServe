@@ -138,13 +138,14 @@ void HttpServer::ParseData(std::vector<unsigned char>&& message_buffer, std::uni
 
 void HttpServer::Log(const HttpRequest& request, const HttpResponse& response)
 {
-	std::lock_guard<std::mutex> lock(_logger_mutex);
 	auto status_code = response.GetStatusCode();
 	auto formatted_status_start = status_code < 200 ? "\033[1;34m" :
 								  status_code < 300 ? "\033[1;32m" :
 								  status_code < 400 ? "\033[1;33m" :
 													  "\033[1;31m";
 	auto formatted_status_end = "\033[0m";
+
+	std::lock_guard<std::mutex> lock(_logger_mutex);
 	std::cout << "[" << response.GetHeader("date").value_or("") << "] " << request.GetStartLine() << " " << formatted_status_start
 			  << status_code << formatted_status_end << " -\n";
 };
@@ -160,6 +161,7 @@ void HttpServer::HandleApplicationLayer(std::stop_token stop_token)
 		{
 			continue;
 		}
+		std::cout << "[HttpServer] - received request\n";
 		auto [request, socket] = std::move(receiveResult.value());
 		std::unique_ptr<HttpConnection> connection = std::make_unique<HttpConnection>(std::move(socket));
 		connection->SetDataHandler(

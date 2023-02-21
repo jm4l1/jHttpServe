@@ -57,11 +57,12 @@ public:
 	void Listen();
 	std::unique_ptr<jSocket> Accept(std::chrono::milliseconds timeout = std::chrono::milliseconds(500));
 	void Write(const std::vector<unsigned char>& data_buffer);
-	ReadResult Read(std::chrono::milliseconds read_timeout = std::chrono::milliseconds(500));
+	ReadResult Read();
 	bool Bind();
 	bool IsTcp() const;
 	bool IsSCTP() const;
 	bool IsUdp() const;
+	void Close();
 
 private:
 	int _socket_fd;
