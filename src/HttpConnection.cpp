@@ -1,7 +1,8 @@
 #include "HttpConnection.h"
 
+#include <algorithm>
+#include <ranges>
 #include <utility>
-
 
 HttpConnection::HttpConnection(std::unique_ptr<jSocket> socket)
   : _socket(std::move(socket))
@@ -61,7 +62,8 @@ std::optional<std::vector<unsigned char>> HttpConnection::Receive()
 	return *(std::get_if<std::vector<unsigned char>>(&read_result));
 }
 
-void HttpConnection::SetDataHandler(const std::function<std::optional<HttpResponse>(const std::vector<unsigned char>&)>& data_handler)
+void HttpConnection::SetDataHandler(
+	const std::function<HttpConnection::DataHandlerResponse(const std::vector<unsigned char>&)>& data_handler)
 {
 	_data_handler = data_handler;
 }
@@ -70,17 +72,17 @@ void HttpConnection::HandleData(const std::vector<unsigned char>& data_buffer)
 	if (_data_handler)
 	{
 		auto response = _data_handler(data_buffer);
-		if (response.has_value())
+		if (!response._data_buffer.empty())
 		{
-			auto connectionHeaderLower = response.value().GetHeader("connection").value_or("");
-			auto connectionHeaderUpper = response.value().GetHeader("Connection").value_or("");
-
-			if (connectionHeaderLower == "Close" || connectionHeaderLower == "close" || connectionHeaderUpper == "Close" ||
-				connectionHeaderUpper == "close")
-			{
-				_can_close = true;
-			}
-			Send(response.value().ToBuffer());
+			std::ranges::for_each(response._data_buffer,
+								  [this](auto& buffer)
+								  {
+									  Send(buffer);
+								  });
+		}
+		if (response._should_close)
+		{
+			_can_close = true;
 		}
 	}
 }

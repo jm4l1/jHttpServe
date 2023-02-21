@@ -31,10 +31,12 @@ public:
 
 private:
 	void ParseConfigFile(std::string);
-	void HandleApplicationLayerHttp2Sync(HttpRequest&&, HttpResponse&&);
 	void HandleApplicationLayer(std::stop_token stop_token);
+	HttpResponse HandleHttp2Upgrade(HttpRequest&&);
 	HttpResponse HandleUpload(HttpRequest&&);
 	HttpResponse HandleGetUploads(HttpRequest&&);
+	std::vector<unsigned char> GetConnectionPreface() const;
+	std::vector<unsigned char> GetSettingsFrame() const;
 	void Log(const HttpRequest&, const HttpResponse&);
 	bool ValidateMethod(std::string method)
 	{
@@ -61,6 +63,7 @@ private:
 	void PerformSocketTask(std::stop_token stop_token);
 	void ParseData(std::vector<unsigned char>&& message_buffer, std::unique_ptr<jSocket> socket);
 	HttpResponse HandleHttpRequest(HttpRequest&& request);
+	HttpConnection::DataHandlerResponse HandleData(const std::vector<unsigned char>& data_buffer);
 
 private:
 	jjson::value _config;

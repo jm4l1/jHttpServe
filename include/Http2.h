@@ -20,7 +20,7 @@
 #define HTTP2_WINDOW_UPDATE_FRAME 0x8
 #define HTTP2_CONTINUATION_FRAME 0x8
 
-// Settings Paramerters
+// Settings Parameters
 #define SETTINGS_HEADER_TABLE_SIZE 0x0001
 #define SETTINGS_ENABLE_PUSH 0x0002
 #define SETTINGS_MAX_CONCURRENT_STREAMS 0x0003
@@ -146,7 +146,7 @@ struct Http2Frame
 struct Http2SettingsParam
 {
 #if 0
-        //                              Http2  Settigns Param                         
+        //                              Http2  Settings Param                         
         2 bytes               4 bytes                                               
         +=========================================================================+
         |    identifier      |   Value                                            |

@@ -165,17 +165,9 @@ void HttpServer::HandleApplicationLayer(std::stop_token stop_token)
 		auto [request, socket] = std::move(receiveResult.value());
 		std::unique_ptr<HttpConnection> connection = std::make_unique<HttpConnection>(std::move(socket));
 		connection->SetDataHandler(
-			[this](const std::vector<unsigned char>& data_buffer) -> std::optional<HttpResponse>
+			[this](const std::vector<unsigned char>& data_buffer) -> HttpConnection::DataHandlerResponse
 			{
-				{
-					HttpRequest http_request(data_buffer);
-					if (http_request.isValid)
-					{
-						return HandleHttpRequest(std::move(http_request));
-					}
-				}
-				std::cout << "[HttpServer] - Unknown data received\n";
-				return std::nullopt;
+				return HandleData(data_buffer);
 			});
 		connection->HandleData(request.ToBuffer());
 		_connections.emplace_back(std::move(connection));
@@ -183,6 +175,87 @@ void HttpServer::HandleApplicationLayer(std::stop_token stop_token)
 	std::cout << "[HttpServer] - Application Layer Ending\n";
 	_is_server_running = false;
 };
+
+HttpConnection::DataHandlerResponse HttpServer::HandleData(const std::vector<unsigned char>& data_buffer)
+{
+	HttpConnection::DataHandlerResponse handler_response;
+	{
+		HttpRequest http_request(data_buffer);
+		if (http_request.isValid)
+		{
+			if (http_request.GetHeader("Upgrade").has_value())
+			{
+				auto upgrade_token = http_request.GetHeader("Upgrade").value();
+				if (upgrade_token == "h2c")
+				{
+					if (http_request.GetHeader("HTTP2-Settings").has_value())
+					{
+						auto http2_response_buffer = HandleHttp2Upgrade(std::move(http_request)).ToBuffer();
+						auto http2_settings_frame_buffer = GetSettingsFrame();
+						std::vector<unsigned char> buffer;
+						buffer.reserve(http2_response_buffer.size() + http2_settings_frame_buffer.size());
+						buffer.insert(buffer.end(), http2_response_buffer.begin(), http2_response_buffer.end());
+						buffer.insert(buffer.end(), http2_settings_frame_buffer.begin(), http2_settings_frame_buffer.end());
+						return { ._data_buffer = { buffer } };
+					}
+				}
+			}
+
+			auto response = HandleHttpRequest(std::move(http_request));
+			auto connectionHeaderLower = response.GetHeader("connection").value_or("");
+			auto connectionHeaderUpper = response.GetHeader("Connection").value_or("");
+
+			handler_response._data_buffer = { response.ToBuffer() };
+
+			if (connectionHeaderLower == "Close" || connectionHeaderLower == "close" || connectionHeaderUpper == "Close" ||
+				connectionHeaderUpper == "close")
+			{
+				handler_response._should_close = true;
+			}
+			return handler_response;
+		}
+	}
+	std::cout << "[HttpServer] - Unknown data received\n";
+	return handler_response;
+}
+HttpResponse HttpServer::HandleHttp2Upgrade(HttpRequest&& request)
+{
+	HttpResponse response;
+	response.SetStatusCode(101);
+	response.SetHeader("Connection", "Upgrade");
+	response.SetHeader("Upgrade", "h2c");
+	response.SetHeader("server", (std::string)_config["server_name"]);
+	response.SetHeader("date", GetDate());
+
+	Log(request, response);
+	return response;
+};
+
+std::vector<unsigned char> HttpServer::GetConnectionPreface() const
+{
+	std::vector<unsigned char> connection_preface(CONNECTION_PREFACE, (CONNECTION_PREFACE) + strlen(CONNECTION_PREFACE));
+	return connection_preface;
+}
+std::vector<unsigned char> HttpServer::GetSettingsFrame() const
+{
+	auto settings_max_frame_size = Http2SettingsParam(SETTINGS_MAX_FRAME_SIZE, 16777215);
+	auto settings_initial_window_size = Http2SettingsParam(SETTINGS_INITIAL_WINDOW_SIZE, 1048576);
+	auto settings_max_concurrent_streams = Http2SettingsParam(SETTINGS_MAX_CONCURRENT_STREAMS, 100);
+	auto settings_frame = Http2SettingsFrame();
+
+	settings_frame.AddParam(settings_max_frame_size);
+	settings_frame.AddParam(settings_initial_window_size);
+	settings_frame.AddParam(settings_max_concurrent_streams);
+
+	auto frame = Http2Frame();
+	frame.type = HTTP2_SETTINGS_FRAME;
+	frame.length = settings_frame.Size();
+	frame.flags = 0x0;
+	frame.stream_id = 0x0;
+	frame.payload = settings_frame.Serialize();
+
+	return frame.Serialize();
+}
 
 HttpResponse HttpServer::HandleHttpRequest(HttpRequest&& request)
 {
@@ -209,6 +282,7 @@ HttpResponse HttpServer::HandleHttpRequest(HttpRequest&& request)
 		Log(request, response);
 		return response;
 	}
+
 	// check route map for requested resource
 	auto request_handler = _route_map.GetRouteHandler(method + target).value_or(nullptr);
 	if (request_handler)

@@ -1,5 +1,7 @@
 #include "HttpMessage.h"
 
+#include "Utility.h"
+
 #include <iostream>
 #include <iterator>
 #include <sstream>
@@ -62,6 +64,14 @@ void HttpMessage::SetBody(const std::vector<unsigned char>& body)
 	SetHeader("content-length", std::to_string(body_length_bytes));
 };
 
+void HttpMessage::AppendToBody(const std::vector<unsigned char>& buffer)
+{
+	_body.insert(_body.begin(), buffer.begin(), buffer.end());
+	auto body_length_char = _body.size();
+	auto body_length_bytes = body_length_char * sizeof(_body[0]);
+	SetHeader("content-length", std::to_string(body_length_bytes));
+}
+
 void HttpMessage::SetBody(const jjson::value& json_body)
 {
 	auto json_buffer = json_body.to_string().c_str();
@@ -92,6 +102,7 @@ void HttpMessage::SetVersion(std::string version)
 
 HttpRequest::HttpRequest(std::vector<unsigned char> request_buffer)
 {
+	std::string test_string(request_buffer.begin(), request_buffer.end());
 	auto line_end = std::find(request_buffer.begin(), request_buffer.end(), '\r');
 	if (line_end == request_buffer.end())
 	{
@@ -114,7 +125,7 @@ HttpRequest::HttpRequest(std::vector<unsigned char> request_buffer)
 		return;
 	}
 	request_buffer.erase(request_buffer.begin(), line_end + 2);
-	line_end = std::find(request_buffer.begin(), request_buffer.end(), '\n');
+	line_end = std::find(request_buffer.begin(), request_buffer.end(), '\r');
 	// headers
 	while (line_end != request_buffer.end())
 	{
@@ -128,6 +139,8 @@ HttpRequest::HttpRequest(std::vector<unsigned char> request_buffer)
 					  });
 		std::getline(header_line_stream, header_name, ':');
 		std::getline(header_line_stream, header_value, '\r');
+		Utility::trim(header_name);
+		Utility::trim(header_value);
 		SetHeader(header_name, header_value);
 		request_buffer.erase(request_buffer.begin(), line_end + 2);
 		auto next_char = request_buffer[0];

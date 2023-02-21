@@ -16,7 +16,8 @@
 
 static std::vector<std::string> Methods({ "GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE" });
 
-static std::unordered_map<int, std::string> ResponseCodes = { { 200, "OK" },
+static std::unordered_map<int, std::string> ResponseCodes = { { 101, "Switching Protocols" },
+															  { 200, "OK" },
 															  { 400, "Bad Request" },
 															  { 401, "Unauthorized" },
 															  { 403, "Forbidden" },
@@ -39,6 +40,7 @@ public:
 	void SetHeader(std::string, std::string);
 	void SetBody(const jjson::value&);
 	void SetBody(const std::vector<unsigned char>&);
+	void AppendToBody(const std::vector<unsigned char>& buffer);
 	std::optional<std::string> GetHeader(std::string) const;
 	std::vector<unsigned char> GetBody() const;
 	void SetVersion(std::string);

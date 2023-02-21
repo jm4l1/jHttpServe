@@ -14,12 +14,19 @@
 class HttpConnection
 {
 public:
+	struct DataHandlerResponse
+	{
+		bool _should_close = false;
+		std::vector<std::vector<unsigned char>> _data_buffer = {};
+	};
+
+public:
 	HttpConnection(std::unique_ptr<jSocket> socket);
 	~HttpConnection();
 	HttpConnection(HttpConnection&& other);
 	HttpConnection(HttpConnection& other) = delete;
 	void Close();
-	void SetDataHandler(const std::function<std::optional<HttpResponse>(const std::vector<unsigned char>&)>& data_handler);
+	void SetDataHandler(const std::function<HttpConnection::DataHandlerResponse(const std::vector<unsigned char>&)>& data_handler);
 	void HandleData(const std::vector<unsigned char>& data_buffer);
 	inline bool CanClose() const
 	{
@@ -29,7 +36,7 @@ public:
 
 private:
 	void Start();
-	std::optional<std::vector<unsigned char> > Receive();
+	std::optional<std::vector<unsigned char>> Receive();
 	void Send(const std::vector<unsigned char>& data_buffer);
 	void Worker(std::stop_token stop_token);
 
@@ -38,7 +45,7 @@ private:
 	std::chrono::steady_clock::time_point _last_used_time;
 	std::mutex _last_used_mutex;
 	std::jthread _connection_thread;
-	std::function<std::optional<HttpResponse>(const std::vector<unsigned char>)> _data_handler = nullptr;
+	std::function<DataHandlerResponse(const std::vector<unsigned char>)> _data_handler = nullptr;
 	std::atomic<bool> _can_close = false;
 };
 
