@@ -4,8 +4,9 @@
 #include <ranges>
 #include <utility>
 
-HttpConnection::HttpConnection(std::unique_ptr<jSocket> socket)
+HttpConnection::HttpConnection(std::unique_ptr<jSocket> socket, HttpParser* parser)
   : _socket(std::move(socket))
+  , _parser(parser)
 {
 	Start();
 }
@@ -25,7 +26,6 @@ HttpConnection::HttpConnection(HttpConnection&& other)
 {
 	this->_socket = std::move(other._socket);
 	this->_connection_thread = std::move(other._connection_thread);
-	this->_data_handler = std::move(other._data_handler);
 	Start();
 }
 
@@ -62,28 +62,54 @@ std::optional<std::vector<unsigned char>> HttpConnection::Receive()
 	return *(std::get_if<std::vector<unsigned char>>(&read_result));
 }
 
-void HttpConnection::SetDataHandler(
-	const std::function<HttpConnection::DataHandlerResponse(const std::vector<unsigned char>&)>& data_handler)
-{
-	_data_handler = data_handler;
-}
 void HttpConnection::HandleData(const std::vector<unsigned char>& data_buffer)
 {
-	if (_data_handler)
 	{
-		auto response = _data_handler(data_buffer);
-		if (!response._data_buffer.empty())
+		// http/1.*
 		{
-			std::ranges::for_each(response._data_buffer,
-								  [this](auto& buffer)
-								  {
-									  Send(buffer);
-								  });
+			HttpRequest http_request(data_buffer);
+			if (http_request.isValid)
+			{
+				if (http_request.GetHeader("Upgrade").has_value())
+				{
+					auto upgrade_token = http_request.GetHeader("Upgrade").value();
+					// http2 upgrade
+					if (upgrade_token == "h2c")
+					{
+						if (http_request.GetHeader("HTTP2-Settings").has_value())
+						{
+							auto http2_response_buffer = _parser->HandleHttp2Upgrade(std::move(http_request)).ToBuffer();
+							auto http2_settings_frame_buffer = _parser->GetSettingsFrame();
+							std::vector<unsigned char> buffer;
+							buffer.reserve(http2_response_buffer.size() + http2_settings_frame_buffer.size());
+							buffer.insert(buffer.end(), http2_response_buffer.begin(), http2_response_buffer.end());
+							buffer.insert(buffer.end(), http2_settings_frame_buffer.begin(), http2_settings_frame_buffer.end());
+							Send(buffer);
+							return;
+						}
+					}
+				}
+
+				auto response = _parser->HandleHttpRequest(std::move(http_request));
+				auto connectionHeaderLower = response.GetHeader("connection").value_or("");
+				auto connectionHeaderUpper = response.GetHeader("Connection").value_or("");
+
+				if (connectionHeaderLower == "Close" || connectionHeaderLower == "close" || connectionHeaderUpper == "Close" ||
+					connectionHeaderUpper == "close")
+				{
+					_can_close = true;
+				}
+				Send(response.ToBuffer());
+				return;
+			}
 		}
-		if (response._should_close)
+		// http/2.0
 		{
-			_can_close = true;
+			if (IsHttp2ConnectionPreface(data_buffer))
+			{
+			}
 		}
+		std::cout << "[HttpServer] - Unknown data received\n";
 	}
 }
 

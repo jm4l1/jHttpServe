@@ -1,8 +1,10 @@
 #ifndef _HTTPSERVER_H_
 #define _HTTPSERVER_H_
 
+#include "Http2.h"
 #include "HttpConnection.h"
 #include "HttpMessage.h"
+#include "HttpParser.h"
 #include "MessageQueue.h"
 #include "RouteMap.h"
 #include "SocketServer.h"
@@ -30,40 +32,12 @@ public:
 	void Post(std::string, std::function<HttpResponse(HttpRequest&&)>);
 
 private:
+	void Log(const HttpRequest&, const HttpResponse&);
 	void ParseConfigFile(std::string);
 	void HandleApplicationLayer(std::stop_token stop_token);
-	HttpResponse HandleHttp2Upgrade(HttpRequest&&);
-	HttpResponse HandleUpload(HttpRequest&&);
-	HttpResponse HandleGetUploads(HttpRequest&&);
-	std::vector<unsigned char> GetConnectionPreface() const;
-	std::vector<unsigned char> GetSettingsFrame() const;
-	void Log(const HttpRequest&, const HttpResponse&);
-	bool ValidateMethod(std::string method)
-	{
-		std::stringstream body_stream;
-		auto method_itr = std::find(_allowed_methods.begin(), _allowed_methods.end(), method);
-		return method_itr != _allowed_methods.end();
-	}
-	static std::string GetDate()
-	{
-		auto now = std::chrono::system_clock::now();
-		auto date = std::chrono::system_clock::to_time_t(now);
-		std::stringstream date_stream;
-		date_stream << std::put_time(std::gmtime(&date), "%a, %d %b %Y %OH:%M:%S GMT");
-		return date_stream.str();
-	};
-	static std::string GetshortDate()
-	{
-		auto now = std::chrono::system_clock::now();
-		auto date = std::chrono::system_clock::to_time_t(now);
-		std::stringstream date_stream;
-		date_stream << std::put_time(std::localtime(&date), "%Y%m%d_%OH:%M:%S");
-		return date_stream.str();
-	};
 	void PerformSocketTask(std::stop_token stop_token);
 	void ParseData(std::vector<unsigned char>&& message_buffer, std::unique_ptr<jSocket> socket);
-	HttpResponse HandleHttpRequest(HttpRequest&& request);
-	HttpConnection::DataHandlerResponse HandleData(const std::vector<unsigned char>& data_buffer);
+
 
 private:
 	jjson::value _config;
@@ -77,6 +51,7 @@ private:
 	std::vector<std::unique_ptr<HttpConnection>> _connections = {};
 	std::atomic<bool> _is_server_running = true;
 	std::condition_variable _application_state_cond_var;
+	std::unique_ptr<HttpParser> _parser = nullptr;
 };
 
 #endif

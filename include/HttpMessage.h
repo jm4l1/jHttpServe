@@ -150,4 +150,5 @@ private:
 	std::string _reason_phrase;
 	std::string _http_version;
 };
+
 #endif
