@@ -56,12 +56,16 @@ struct Http2Frame
         |    length      |  Type  | Flags  |R|       Stream ID      |   payload    |
         +=========================================================================+
 #endif
+	static Http2Frame GetFromBuffer(const std::vector<unsigned char>& data_buffer);
 	Http2Frame() = default;
+	Http2Frame(const std::vector<unsigned char>& data_buffer);
+	bool IsValidSettingsFrame() const;
+	bool IsSettingsWithAck() const;
 	std::bitset<24> length;
 	std::bitset<8> type;
 	std::bitset<8> flags;
 	std::bitset<32> stream_id;
-	std::vector<bool> payload;
+	std::vector<unsigned char> payload;
 	std::vector<unsigned char> Serialize() const
 	{
 		std::vector<unsigned char> buffer;
@@ -159,9 +163,9 @@ struct Http2SettingsParam
 	}
 	std::bitset<16> identifier;
 	std::bitset<32> value;
-	std::vector<bool> Serialize() const
+	std::vector<unsigned char> Serialize() const
 	{
-		std::vector<bool> buffer;
+		std::vector<unsigned char> buffer;
 		int i;
 		for (i = identifier.size() - 1; i >= 0; i--)
 		{
@@ -179,13 +183,15 @@ struct Http2SettingsParam
 #pragma pack(push, 1)
 struct Http2SettingsFrame
 {
+	Http2SettingsFrame() = default;
+	Http2SettingsFrame(const std::vector<unsigned char>& data_buffer);
 	void AddParam(const Http2SettingsParam param)
 	{
 		params.push_back(param);
 	}
-	std::vector<bool> Serialize() const
+	std::vector<unsigned char> Serialize() const
 	{
-		std::vector<bool> buffer;
+		std::vector<unsigned char> buffer;
 		for (auto param : params)
 		{
 			auto param_buffer = param.Serialize();
@@ -197,8 +203,6 @@ struct Http2SettingsFrame
 	{
 		return params.size() * 6;
 	}
-
-private:
 	std::vector<Http2SettingsParam> params;
 };
 #pragma pack(pop)

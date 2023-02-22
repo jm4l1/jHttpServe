@@ -38,14 +38,20 @@ private:
 	}
 
 private:
+	// connection state
 	std::unique_ptr<jSocket> _socket;
 	std::chrono::steady_clock::time_point _last_used_time;
 	std::mutex _last_used_mutex;
 	std::jthread _connection_thread;
 	std::atomic<bool> _can_close = false;
-	bool _is_http2 = false;
-	uint32_t _next_stream_id = 2;
 	HttpParser* _parser = nullptr;
+
+	// http state
+	std::atomic<bool> _is_http2 = false;
+	bool _received_client_connection_preface = false;
+	bool _received_first_settings_frame = false;
+	std::vector<Http2SettingsParam> _settings;
+	uint32_t _next_stream_id = 2;
 };
 
 #endif

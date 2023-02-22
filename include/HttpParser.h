@@ -11,9 +11,13 @@
 
 class jSocket;
 
-static bool IsHttp2ConnectionPreface(const std::vector<unsigned char>& data_buffer)
+static bool HasHttp2ConnectionPreface(const std::vector<unsigned char>& data_buffer)
 {
-	std::string data_buffer_string(data_buffer.begin(), data_buffer.end());
+	if (data_buffer.size() < 24)
+	{
+		return false;
+	}
+	std::string data_buffer_string(data_buffer.begin(), data_buffer.begin() + 24);
 	return CONNECTION_PREFACE == data_buffer_string;
 }
 
@@ -30,6 +34,7 @@ public:
 
 	std::vector<unsigned char> GetConnectionPreface() const;
 	std::vector<unsigned char> GetSettingsFrame() const;
+	std::vector<unsigned char> GetSettingsFrameWithAck() const;
 	HttpResponse HandleHttp2Upgrade(HttpRequest&&);
 	HttpResponse HandleHttpRequest(HttpRequest&& request);
 

@@ -121,6 +121,7 @@ ReadResult jSocket::Read()
 	{
 		return ReadError::UnknownError;
 	}
+	data_buffer.reserve(bytes_read);
 	data_buffer.insert(data_buffer.end(), read_buffer, read_buffer + bytes_read);
 
 	return data_buffer;

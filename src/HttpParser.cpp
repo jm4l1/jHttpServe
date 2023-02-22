@@ -77,6 +77,18 @@ std::vector<unsigned char> HttpParser::GetSettingsFrame() const
 	return frame.Serialize();
 }
 
+std::vector<unsigned char> HttpParser::GetSettingsFrameWithAck() const
+{
+	auto settings_frame = Http2SettingsFrame();
+	auto frame = Http2Frame();
+	frame.type = HTTP2_SETTINGS_FRAME;
+	frame.length = 0;
+	frame.flags = 0x1;
+	frame.stream_id = 0x0;
+
+	return frame.Serialize();
+}
+
 HttpResponse HttpParser::HandleHttpRequest(HttpRequest&& request)
 {
 	HttpResponse response = HttpResponse();
