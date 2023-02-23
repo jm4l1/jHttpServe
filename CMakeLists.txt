@@ -2,8 +2,7 @@ cmake_minimum_required(VERSION 3.7)
 set(project jHttpServe)
 project(jHttpServe)
 
-find_package( Threads REQUIRED)
-add_definitions(-std=c++17)
+add_definitions(-std=c++20)
 
 set(CXX_FLAGS "-Wall")
 set(CMAKE_CXX_FLAGS, "${CXX_FLAGS}")
