@@ -22,6 +22,7 @@ HttpConnection::~HttpConnection()
 		_socket->Close();
 	}
 }
+
 HttpConnection::HttpConnection(HttpConnection&& other)
 {
 	this->_socket = std::move(other._socket);
@@ -33,6 +34,7 @@ void HttpConnection::Close()
 {
 	_connection_thread.request_stop();
 }
+
 void HttpConnection::Start()
 {
 	_connection_thread = std::jthread(std::bind_front(&HttpConnection::Worker, this));
@@ -77,6 +79,8 @@ void HttpConnection::HandleData(const std::vector<unsigned char>& data_buffer)
 				{
 					if (http_request.GetHeader("HTTP2-Settings").has_value())
 					{
+						Stream stream(0x01, StreamInitiator::Client);
+						stream.SetOriginalRequest(http_request);
 						auto http2_response_buffer = _parser->HandleHttp2Upgrade(std::move(http_request)).ToBuffer();
 						auto http2_settings_frame_buffer = _parser->GetSettingsFrame();
 						std::vector<unsigned char> buffer;
@@ -88,6 +92,7 @@ void HttpConnection::HandleData(const std::vector<unsigned char>& data_buffer)
 						return;
 					}
 				}
+				// support further types in the future
 			}
 
 			auto response = _parser->HandleHttpRequest(std::move(http_request));
@@ -108,15 +113,14 @@ void HttpConnection::HandleData(const std::vector<unsigned char>& data_buffer)
 	{
 		if (!_received_client_connection_preface && HasHttp2ConnectionPreface(data_buffer))
 		{
-			std::cout << "received connection preface\n";
 			_received_client_connection_preface = true;
 		}
 		else
 		{
-			std::cout << "expected connection preface but got " << data_buffer.size() << "bytes of \n\""
-					  << std::string(data_buffer.begin(), data_buffer.end()) << "\" instead of \"\n"
-					  << CONNECTION_PREFACE << "\"\n";
 			// send connection error
+			Send(_parser->GetGoAwayFrame(0x0000, Http2Error::PROTOCOL_ERROR, "Expected connection preface"));
+			_can_close = true;
+			_connection_thread.request_stop();
 			return;
 		}
 		try
@@ -131,19 +135,64 @@ void HttpConnection::HandleData(const std::vector<unsigned char>& data_buffer)
 					{
 						_settings = Http2SettingsFrame(frame.payload).params;
 						_received_first_settings_frame = true;
-						std::cout << "got first settings frame\n";
 						Send(_parser->GetSettingsFrameWithAck());
 					}
 					else
 					{
 						// send connection error
-						std::cout << "Expected settings frame\n";
+						Send(_parser->GetGoAwayFrame(0x0000, Http2Error::PROTOCOL_ERROR, "Expected settings frame"));
+						_can_close = true;
+						_connection_thread.request_stop();
+						return;
+					}
+				}
+				if (frame.stream_id != 0x0000)
+				{
+					// we assume we always create the first stream using the upgrade header
+					if (_streams.empty() ||
+						(frame.type == HTTP2_HEADER_FRAME && (_streams.end() - 1)->GetStreamId() >= frame.stream_id.to_ulong()))
+					{
+						Send(_parser->GetGoAwayFrame(0x0000, Http2Error::PROTOCOL_ERROR, "Received unexpected stream Identifier"));
+						_can_close = true;
+						_connection_thread.request_stop();
+						return;
+					}
+
+					if (frame.type == HTTP2_HEADER_FRAME)
+					{
+						// add a new stream
+						Stream stream(frame.stream_id.to_ulong(), StreamInitiator::Client);
+						_streams.emplace_back(stream);
+						// stream.SetOriginalRequest();
+						continue;
+					}
+
+					auto stream = std::ranges::find_if(_streams,
+													   [&frame](const auto& s)
+													   {
+														   return s.GetStreamId() == frame.stream_id.to_ulong();
+													   });
+					if (stream == _streams.end())
+					{
+						Send(_parser->GetGoAwayFrame(0x0000, Http2Error::PROTOCOL_ERROR, "Received unexpected stream Identifier"));
+						_can_close = true;
+						_connection_thread.request_stop();
+						return;
+					}
+					auto streamTransistionResult =
+						stream->TransitionToNextState(StreamAction::Receive, frame.type.to_ulong(), frame.flags.to_ulong());
+					if (streamTransistionResult != Http2Error::NO_ERROR)
+					{
+						Send(_parser->GetGoAwayFrame((_streams.end() - 1)->GetStreamId(), streamTransistionResult, "Error on stream"));
+						_can_close = true;
+						_connection_thread.request_stop();
 						return;
 					}
 				}
 				std::cout << "got a frame of " << frame.length.to_ulong() + 9 << " bytes\n";
 				offset += frame.length.to_ulong() + 9;
 			}
+			// all frame processed
 		}
 		catch (const std::length_error& e)
 		{

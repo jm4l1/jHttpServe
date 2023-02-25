@@ -30,6 +30,7 @@ Http2Frame Http2Frame::GetFromBuffer(const std::vector<unsigned char>& data_buff
 	frame.payload.insert(frame.payload.begin(), data_buffer.begin() + offset, data_buffer.begin() + 9 + frame.length.to_ulong());
 	return frame;
 }
+
 Http2Frame::Http2Frame(const std::vector<unsigned char>& data_buffer)
 {
 	if (data_buffer.size() < 9)
@@ -52,7 +53,6 @@ Http2Frame::Http2Frame(const std::vector<unsigned char>& data_buffer)
 	payload.insert(payload.begin(), data_buffer.begin() + offset, data_buffer.end());
 }
 
-
 bool Http2Frame::IsValidSettingsFrame() const
 {
 	if (type != HTTP2_SETTINGS_FRAME)
@@ -74,7 +74,6 @@ bool Http2Frame::IsSettingsWithAck() const
 {
 	return (type == HTTP2_SETTINGS_FRAME && flags == 0x01);
 }
-
 
 Http2SettingsFrame::Http2SettingsFrame(const std::vector<unsigned char>& data_buffer)
 {

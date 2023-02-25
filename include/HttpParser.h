@@ -35,6 +35,7 @@ public:
 	std::vector<unsigned char> GetConnectionPreface() const;
 	std::vector<unsigned char> GetSettingsFrame() const;
 	std::vector<unsigned char> GetSettingsFrameWithAck() const;
+	std::vector<unsigned char> GetGoAwayFrame(uint32_t last_stream_id, const Http2Error errorCode, std::string debug_info) const;
 	HttpResponse HandleHttp2Upgrade(HttpRequest&&);
 	HttpResponse HandleHttpRequest(HttpRequest&& request);
 

@@ -77,6 +77,23 @@ std::vector<unsigned char> HttpParser::GetSettingsFrame() const
 	return frame.Serialize();
 }
 
+std::vector<unsigned char> HttpParser::GetGoAwayFrame(uint32_t last_stream_id, const Http2Error errorCode, std::string debug_info) const
+{
+	auto frame = Http2Frame();
+	frame.type = HTTP2_SETTINGS_FRAME;
+	frame.flags = 0x1;
+	frame.stream_id = 0x0;
+	frame.length = sizeof(last_stream_id) + sizeof(errorCode) + debug_info.size();
+	frame.payload.reserve(frame.length.to_ulong());
+	size_t offset = 0;
+	memcpy(frame.payload.data() + offset, &last_stream_id, sizeof(last_stream_id));
+	offset += sizeof(last_stream_id);
+	memcpy(frame.payload.data() + offset, &errorCode, sizeof(errorCode));
+	offset += sizeof(errorCode);
+	memcpy(frame.payload.data() + offset, debug_info.data(), debug_info.size());
+	return frame.Serialize();
+}
+
 std::vector<unsigned char> HttpParser::GetSettingsFrameWithAck() const
 {
 	auto settings_frame = Http2SettingsFrame();

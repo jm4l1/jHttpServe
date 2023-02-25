@@ -3,6 +3,7 @@
 
 #include "HttpMessage.h"
 #include "HttpParser.h"
+#include "Stream.h"
 #include "jSocket.h"
 
 #include <chrono>
@@ -52,6 +53,7 @@ private:
 	bool _received_first_settings_frame = false;
 	std::vector<Http2SettingsParam> _settings;
 	uint32_t _next_stream_id = 2;
+	std::vector<Stream> _streams = {};
 };
 
 #endif
