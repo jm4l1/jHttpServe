@@ -9,6 +9,7 @@ set(CMAKE_CXX_FLAGS, "${CXX_FLAGS}")
 set(CMAKE_BUILD_TYPE Debug)
 
 add_subdirectory(lib/jjson)
+add_subdirectory(tests)
 
 include_directories(include "lib/jjson/include")
 file(GLOB SOURCES "src/*.cpp" "lib/jjson/src/*.cpp")

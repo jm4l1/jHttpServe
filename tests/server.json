@@ -1,0 +1,1 @@
+{"port" : 12345,"timeout" : 100,"server_name" : "CPPND Server","allowed_methods" : ["GET","OPTIONS","POST","DELETE"]}

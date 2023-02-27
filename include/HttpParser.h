@@ -1,8 +1,10 @@
 #ifndef __HTTP_PARSER_H_
 #define __HTTP_PARSER_H_
 
+#include "Hpack.h"
 #include "Http2.h"
 #include "HttpMessage.h"
+#include "Huffman.h"
 #include "RouteMap.h"
 
 #include <memory>
