@@ -42,6 +42,7 @@ public:
 	void SetBody(const std::vector<unsigned char>&);
 	void AppendToBody(const std::vector<unsigned char>& buffer);
 	std::optional<std::string> GetHeader(std::string) const;
+	std::unordered_map<std::string, std::string> GetHeaders() const;
 	std::vector<unsigned char> GetBody() const;
 	void SetVersion(std::string);
 	virtual std::string GetStartLine() const
@@ -143,6 +144,10 @@ public:
 	{
 		return _status_code;
 	};
+	inline std::string GetReasonPhrase() const
+	{
+		return _reason_phrase;
+	}
 	std::string GetStartLine() const override;
 
 private:

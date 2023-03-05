@@ -54,6 +54,8 @@ private:
 	std::vector<Http2SettingsParam> _settings;
 	uint32_t _next_stream_id = 2;
 	std::vector<Stream> _streams = {};
+	bool _expects_continuation = false;
+	uint32_t _stream_awaiting_continuation;
 };
 
 #endif

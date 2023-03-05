@@ -30,6 +30,9 @@ enum class StreamInitiator
 class Stream
 {
 public:
+	Stream() = default;
+	Stream(Stream&& other);
+	Stream& operator=(Stream&& other);
 	Stream(uint32_t stream_id, StreamInitiator initiator);
 	StreamState GetState() const;
 	uint32_t GetStreamId() const;

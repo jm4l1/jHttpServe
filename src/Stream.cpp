@@ -11,6 +11,23 @@ Stream::Stream(uint32_t stream_id, StreamInitiator initiator)
 	}
 }
 
+Stream::Stream(Stream&& other)
+{
+	this->_stream_id = other._stream_id;
+	this->_state = other._state;
+	this->_initiator = other._initiator;
+	this->_original_request = std::move(other._original_request);
+}
+
+Stream& Stream::operator=(Stream&& other)
+{
+	this->_stream_id = other._stream_id;
+	this->_state = other._state;
+	this->_initiator = other._initiator;
+	this->_original_request = std::move(other._original_request);
+	return *this;
+}
+
 StreamState Stream::GetState() const
 {
 	return _state;
@@ -27,11 +44,11 @@ Http2Error Stream::TransitionToNextState(StreamAction action, uint8_t frame_type
 	{
 	case StreamState::Idle:
 	{
-		if (frame_type != HTTP2_HEADER_FRAME && frame_type != HTTP2_PUSH_PROMISE_FRAME)
+		if (frame_type != HTTP2_HEADERS_FRAME && frame_type != HTTP2_PUSH_PROMISE_FRAME)
 		{
 			return Http2Error::PROTOCOL_ERROR;
 		}
-		if (frame_type == HTTP2_HEADER_FRAME)
+		if (frame_type == HTTP2_HEADERS_FRAME)
 		{
 			if (action == StreamAction::Receive && _initiator == StreamInitiator::Server)
 			{
@@ -55,7 +72,7 @@ Http2Error Stream::TransitionToNextState(StreamAction action, uint8_t frame_type
 			_state = StreamState::Closed;
 			return Http2Error::NO_ERROR;
 		}
-		if (action == StreamAction::Send && frame_type == HTTP2_HEADER_FRAME)
+		if (action == StreamAction::Send && frame_type == HTTP2_HEADERS_FRAME)
 		{
 			_state = StreamState::HalfClosedRemote;
 			return Http2Error::NO_ERROR;
@@ -77,7 +94,7 @@ Http2Error Stream::TransitionToNextState(StreamAction action, uint8_t frame_type
 			_state = StreamState::Closed;
 			return Http2Error::NO_ERROR;
 		}
-		if (action == StreamAction::Receive && frame_type == HTTP2_HEADER_FRAME)
+		if (action == StreamAction::Receive && frame_type == HTTP2_HEADERS_FRAME)
 		{
 			_state = StreamState::HalfClosedRemote;
 			return Http2Error::NO_ERROR;
@@ -98,7 +115,7 @@ Http2Error Stream::TransitionToNextState(StreamAction action, uint8_t frame_type
 		{
 			_state = StreamState::Closed;
 		}
-		if (flags = HTTP2_FLAG_END_STREAM)
+		if (flags == HTTP2_HEADERS_FLAG_END_STREAM || flags == HTTP2_DATA_FLAG_END_STREAM)
 		{
 			_state = action == StreamAction::Receive ? StreamState::HalfClosedRemote : StreamState::HalfClosedLocal;
 		}
@@ -106,7 +123,8 @@ Http2Error Stream::TransitionToNextState(StreamAction action, uint8_t frame_type
 	}
 	case StreamState::HalfClosedLocal:
 	{
-		if (frame_type == HTTP2_RST_STREAM_FRAME || (action == StreamAction::Send && flags == HTTP2_FLAG_END_STREAM))
+		if (frame_type == HTTP2_RST_STREAM_FRAME ||
+			(action == StreamAction::Send && (flags == HTTP2_HEADERS_FLAG_END_STREAM || flags == HTTP2_DATA_FLAG_END_STREAM)))
 		{
 			_state = StreamState::Closed;
 			return Http2Error::NO_ERROR;
@@ -119,7 +137,8 @@ Http2Error Stream::TransitionToNextState(StreamAction action, uint8_t frame_type
 	}
 	case StreamState::HalfClosedRemote:
 	{
-		if (frame_type == HTTP2_RST_STREAM_FRAME || (action == StreamAction::Receive && flags == HTTP2_FLAG_END_STREAM))
+		if (frame_type == HTTP2_RST_STREAM_FRAME ||
+			(action == StreamAction::Receive && (flags == HTTP2_HEADERS_FLAG_END_STREAM || flags == HTTP2_DATA_FLAG_END_STREAM)))
 		{
 			_state = StreamState::Closed;
 			return Http2Error::NO_ERROR;

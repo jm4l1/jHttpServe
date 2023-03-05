@@ -2,8 +2,10 @@
 #define __UTILITY_H__
 
 #include <algorithm>
+#include <chrono>
 #include <iomanip>
 #include <iostream>
+#include <ranges>
 #include <string>
 
 namespace Utility
@@ -52,6 +54,16 @@ namespace Utility
 		date_stream << std::put_time(std::localtime(&date), "%Y%m%d_%OH:%M:%S");
 		return date_stream.str();
 	};
+
+	static void ToLowerCase(std::string& str)
+	{
+		std::ranges::transform(str,
+							   str.begin(),
+							   [](auto& c)
+							   {
+								   return std::tolower(c);
+							   });
+	}
 
 }  // namespace Utility
 #endif

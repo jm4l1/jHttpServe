@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <ranges>
 #include <utility>
 
 namespace fs = std::filesystem;
@@ -38,7 +39,7 @@ void HttpParser::Log(const HttpRequest& request, const HttpResponse& response)
 			  << status_code << formatted_status_end << " -\n";
 };
 
-HttpResponse HttpParser::HandleHttp2Upgrade(HttpRequest&& request)
+HttpResponse HttpParser::HandleHttp2Upgrade()
 {
 	HttpResponse response;
 	response.SetStatusCode(101);
@@ -47,7 +48,7 @@ HttpResponse HttpParser::HandleHttp2Upgrade(HttpRequest&& request)
 	response.SetHeader("server", _server_name);
 	response.SetHeader("date", Utility::GetDate());
 
-	Log(request, response);
+	// Log(request, response);
 	return response;
 };
 
@@ -94,6 +95,43 @@ std::vector<unsigned char> HttpParser::GetGoAwayFrame(uint32_t last_stream_id, c
 	return frame.Serialize();
 }
 
+std::vector<unsigned char> HttpParser::GetHeadersFrame(uint32_t stream_id,
+													   const int status_code,
+													   const std::unordered_map<std::string, std::string> headers,
+													   uint8_t flags)
+{
+	auto frame = Http2Frame();
+	frame.type = HTTP2_HEADERS_FRAME;
+	frame.flags = flags;
+	frame.stream_id = stream_id;
+	size_t offset = 0;
+	auto header_buffer = _codec.Encode(":status", std::to_string(status_code));
+	frame.payload.reserve(offset + header_buffer.size());
+	frame.payload.insert(frame.payload.end(), header_buffer.begin(), header_buffer.end());
+	offset += header_buffer.size();
+	std::ranges::for_each(headers,
+						  [&frame, &offset, this](const auto& header)
+						  {
+							  auto header_buffer = _codec.Encode(header.first, header.second);
+							  frame.payload.reserve(offset + header_buffer.size());
+							  frame.payload.insert(frame.payload.end(), header_buffer.begin(), header_buffer.end());
+							  offset += header_buffer.size();
+						  });
+	frame.length = frame.payload.size();
+	return frame.Serialize();
+}
+
+std::vector<unsigned char> HttpParser::GetDataFrame(uint32_t stream_id, const std::vector<unsigned char> data_buffer, uint8_t flags)
+{
+	auto frame = Http2Frame();
+	frame.type = HTTP2_DATA_FRAME;
+	frame.flags = flags;
+	frame.stream_id = stream_id;
+	frame.length = data_buffer.size();
+	frame.payload.reserve(frame.length.to_ulong());
+	frame.payload.insert(frame.payload.begin(), data_buffer.begin(), data_buffer.end());
+	return frame.Serialize();
+}
 std::vector<unsigned char> HttpParser::GetSettingsFrameWithAck() const
 {
 	auto settings_frame = Http2SettingsFrame();
@@ -407,4 +445,85 @@ HttpResponse HttpParser::HandleGetUploads(HttpRequest&& request)
 	response.SetStatusCode(200);
 	Log(request, response);
 	return response;
+}
+
+Http2WindowUpdateFrameParseResult HttpParser::HandleHttp2WindowUpdateFrame(const Http2Frame frame)
+{
+	uint32_t window_size_increment = 0;
+	memcpy(&window_size_increment, frame.payload.data(), sizeof(window_size_increment));
+	if (window_size_increment == 0)
+	{
+		return ErrorType({ ._error = Http2Error::PROTOCOL_ERROR, ._reason = "Invalid window size increment" });
+	}
+	return window_size_increment;
+}
+ErrorType HttpParser::HandleHttp2DataFrame(const Http2Frame frame)
+{
+	ErrorType error_type = { ._error = Http2Error::NO_ERROR, ._reason = "" };
+	return error_type;
+}
+ErrorType HttpParser::HandleHttp2HeadersFrame(const Http2Frame frame)
+{
+	ErrorType error_type = { ._error = Http2Error::NO_ERROR, ._reason = "" };
+	bool has_priority = (frame.flags.to_ulong() & HTTP2_HEADERS_FLAG_PRIORITY) | HTTP2_HEADERS_FLAG_PRIORITY;
+	size_t offset = 0;
+
+	uint8_t pad_length = 0x00;
+	uint32_t stream_id;
+	uint8_t weight;
+
+	if ((frame.flags.to_ulong() & HTTP2_FLAG_PADDED) | HTTP2_FLAG_PADDED)
+	{
+		memcpy(&pad_length, &frame.payload + offset, sizeof(weight));
+		if (pad_length >= frame.payload.size())
+		{
+			error_type._error = Http2Error::PROTOCOL_ERROR;
+			error_type._reason = "Invalid padded length";
+			return error_type;
+		}
+		offset += sizeof(weight);
+	}
+
+	memcpy(&stream_id, &frame.payload + offset, sizeof(stream_id));
+
+	if (has_priority)
+	{
+		stream_id ^= 0x8000;
+		memcpy(&weight, &frame.payload + offset, sizeof(weight));
+		offset += sizeof(weight);
+	}
+	std::vector<HPack::TableEntry> header_list;
+	_codec.Decode(std::vector<uint8_t>(frame.payload.begin() + offset, frame.payload.begin() + offset + frame.length.to_ulong()),
+				  header_list);
+	return error_type;
+}
+ErrorType HttpParser::HandleHttp2PriorityFrame(const Http2Frame frame)
+{
+	ErrorType error_type = { ._error = Http2Error::NO_ERROR, ._reason = "" };
+	return error_type;
+}
+ErrorType HttpParser::HandleHttp2ResetStreamFrame(const Http2Frame frame)
+{
+	ErrorType error_type = { ._error = Http2Error::NO_ERROR, ._reason = "" };
+	return error_type;
+}
+ErrorType HttpParser::HandleHttp2PushPromiseFrame(const Http2Frame frame)
+{
+	ErrorType error_type = { ._error = Http2Error::NO_ERROR, ._reason = "" };
+	return error_type;
+}
+ErrorType HttpParser::HandleHttp2PingFrame(const Http2Frame frame)
+{
+	ErrorType error_type = { ._error = Http2Error::NO_ERROR, ._reason = "" };
+	return error_type;
+}
+ErrorType HttpParser::HandleHttp2GoAwayFrame(const Http2Frame frame)
+{
+	ErrorType error_type = { ._error = Http2Error::NO_ERROR, ._reason = "" };
+	return error_type;
+}
+ErrorType HttpParser::HandleHttp2ContinuationFrame(const Http2Frame frame)
+{
+	ErrorType error_type = { ._error = Http2Error::NO_ERROR, ._reason = "" };
+	return error_type;
 }

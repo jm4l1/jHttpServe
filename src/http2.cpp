@@ -1,10 +1,18 @@
 #include "Http2.h"
 
+#include <bitset>
 #include <cstring>
 #include <iostream>
 #include <string>
 
-Http2Frame Http2Frame::GetFromBuffer(const std::vector<unsigned char>& data_buffer)
+static auto STREAM_ID_0_REQUIRED(std::bitset<8> type) -> bool
+{
+	return (type == HTTP2_SETTINGS_FRAME) || (type == HTTP2_PING_FRAME) || (type == HTTP2_GOAWAY_FRAME) ||
+		   (type == HTTP2_WINDOW_UPDATE_FRAME);
+};
+
+
+Http2ParseResult Http2Frame::GetFromBuffer(const std::vector<unsigned char>& data_buffer)
 {
 	Http2Frame frame;
 	if (data_buffer.size() < 9)
@@ -21,36 +29,35 @@ Http2Frame Http2Frame::GetFromBuffer(const std::vector<unsigned char>& data_buff
 	}
 	offset += 3;
 	memcpy(&frame.type, data_buffer.data() + offset, 1);
+	if (
+		// clang-format off
+		(frame.type == HTTP2_PRIORITY_FRAME && frame.length != 0x05) || 
+		(frame.type == HTTP2_RST_STREAM_FRAME && frame.length != 0x04) ||
+		(frame.type == HTTP2_PING_FRAME && frame.length != 0x08) ||
+		(frame.type == HTTP2_WINDOW_UPDATE_FRAME && frame.length != 0x04)
+		)
+	// clang-format on
+	{
+		ErrorType error = { ._error = Http2Error::PROTOCOL_ERROR, ._reason = "Invalid size for frame type" };
+		return error;
+	}
+
 	offset++;
 	memcpy(&frame.flags, data_buffer.data() + offset, 1);
 	offset++;
 	memcpy(&data, data_buffer.data() + offset, 4);
 	frame.stream_id = htonl(data);
+
+	if ((frame.stream_id != 0x0000 && (STREAM_ID_0_REQUIRED(frame.type))) ||
+		(frame.stream_id == 0x0000 && (!STREAM_ID_0_REQUIRED(frame.type))))
+	{
+		ErrorType error = { ._error = Http2Error::PROTOCOL_ERROR, ._reason = "Invalid stream id for frame type" };
+		return error;
+	}
+
 	offset += 4;
 	frame.payload.insert(frame.payload.begin(), data_buffer.begin() + offset, data_buffer.begin() + 9 + frame.length.to_ulong());
 	return frame;
-}
-
-Http2Frame::Http2Frame(const std::vector<unsigned char>& data_buffer)
-{
-	if (data_buffer.size() < 9)
-	{
-		throw ::std::length_error("data buffer not large enough to contain header");
-	}
-	size_t offset = 0;
-	length = std::bitset<24>(std::string(data_buffer.begin() + offset, data_buffer.begin() + length.size()));
-	if (length != data_buffer.size() - 9)
-	{
-		throw ::std::length_error("Frame size does not match length");
-	}
-	offset += length.size();
-	type = data_buffer[offset];
-	offset += type.size();
-	flags = data_buffer[offset];
-	offset += flags.size();
-	stream_id = std::bitset<32>(std::string(data_buffer.begin() + offset, data_buffer.begin() + stream_id.size()));
-	offset += stream_id.size();
-	payload.insert(payload.begin(), data_buffer.begin() + offset, data_buffer.end());
 }
 
 bool Http2Frame::IsValidSettingsFrame() const
@@ -59,7 +66,7 @@ bool Http2Frame::IsValidSettingsFrame() const
 	{
 		return false;
 	}
-	if (length.to_ulong() % 6 != 0)
+	if (length.to_ulong() % 6 != 0x0000)
 	{
 		return false;
 	}

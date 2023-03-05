@@ -74,9 +74,10 @@ void HttpMessage::AppendToBody(const std::vector<unsigned char>& buffer)
 
 void HttpMessage::SetBody(const jjson::value& json_body)
 {
-	auto json_buffer = json_body.to_string().c_str();
-	auto json_buffer_size = json_body.to_string().size() * sizeof(char);
-	_body = std::vector<unsigned char>(json_buffer, json_buffer + json_buffer_size);
+	auto json_buffer = json_body.to_string();
+	auto json_buffer_size = json_buffer.size();
+	_body.reserve(json_buffer_size);
+	_body.insert(_body.begin(), json_buffer.begin(), json_buffer.end());
 	SetHeader("content-length", std::to_string(json_buffer_size));
 };
 
@@ -89,6 +90,11 @@ std::optional<std::string> HttpMessage::GetHeader(std::string header_name) const
 	}
 	return kv_pair->second;
 };
+
+std::unordered_map<std::string, std::string> HttpMessage::GetHeaders() const
+{
+	return _headers;
+}
 
 std::vector<unsigned char> HttpMessage::GetBody() const
 {

@@ -38,8 +38,23 @@ public:
 	std::vector<unsigned char> GetSettingsFrame() const;
 	std::vector<unsigned char> GetSettingsFrameWithAck() const;
 	std::vector<unsigned char> GetGoAwayFrame(uint32_t last_stream_id, const Http2Error errorCode, std::string debug_info) const;
-	HttpResponse HandleHttp2Upgrade(HttpRequest&&);
+	HttpResponse HandleHttp2Upgrade();
 	HttpResponse HandleHttpRequest(HttpRequest&& request);
+
+	ErrorType HandleHttp2DataFrame(const Http2Frame frame);
+	Http2WindowUpdateFrameParseResult HandleHttp2WindowUpdateFrame(const Http2Frame frame);
+	ErrorType HandleHttp2HeadersFrame(const Http2Frame frame);
+	ErrorType HandleHttp2PriorityFrame(const Http2Frame frame);
+	ErrorType HandleHttp2ResetStreamFrame(const Http2Frame frame);
+	ErrorType HandleHttp2PushPromiseFrame(const Http2Frame frame);
+	ErrorType HandleHttp2PingFrame(const Http2Frame frame);
+	ErrorType HandleHttp2GoAwayFrame(const Http2Frame frame);
+	ErrorType HandleHttp2ContinuationFrame(const Http2Frame frame);
+	std::vector<unsigned char> GetHeadersFrame(uint32_t stream_id,
+											   const int status_code,
+											   const std::unordered_map<std::string, std::string> headers,
+											   uint8_t flags = 0x00);
+	std::vector<unsigned char> GetDataFrame(uint32_t stream_id, const std::vector<unsigned char> data_buffer, uint8_t flags = 0x00);
 
 private:
 	void Log(const HttpRequest&, const HttpResponse&);
@@ -59,5 +74,6 @@ private:
 	std::string _upload_dir;
 	std::string _web_dir;
 	RouteMap* _route_map;
+	HPack::Codec _codec;
 };
 #endif
