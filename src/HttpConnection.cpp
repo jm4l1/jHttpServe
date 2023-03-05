@@ -262,7 +262,8 @@ void HttpConnection::HandleData(const std::vector<unsigned char>& data_buffer)
 															  {
 																  return param.identifier.to_ulong() == SETTINGS_INITIAL_WINDOW_SIZE;
 															  });
-					settings_itr->value = window_size_increment;
+					settings_itr->value = settings_itr->value.to_ulong() + window_size_increment;
+					Send(_parser->GetSettingsFrameWithAck());
 				}
 				case HTTP2_DATA_FRAME:
 				{
